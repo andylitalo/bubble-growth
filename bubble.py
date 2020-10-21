@@ -502,6 +502,7 @@ def scf_bubble_impl(m, R, p_bubble, c_bulk, c_s, D, m_prev,
 def time_step(dt, t_prev, m_prev, p_prev, if_tension_prev, R_prev, rho_co2_prev,
            fixed_params, drop_t_term=False):
     """
+    Advances system forward by one time step.
     """
     t_nuc, D, p_in, p_s, p_atm, v, L, c_bulk, c_s_interp_arrs, \
             if_interp_arrs, f_rho_co2, d_tolman, implicit = fixed_params
