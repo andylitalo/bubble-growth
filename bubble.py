@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 # custuom libraries
 import geo
 import polyco2
+import flow
 
 # CONVERSIONS
 s_2_ms = 1000
@@ -106,7 +107,7 @@ def grow(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
     f_rho_co2 = polyco2.interp_rho_co2(eos_co2_file)
 
     # initializes lists of key bubble properties
-    p = [polyco2.calc_p(p_in, p_atm, v, t_nuc, L)]
+    p = [flow.calc_p(p_in, p_atm, v, t_nuc, L)]
     c_s = [np.interp(p[0], *c_s_interp_arrs)]
     R = [R_nuc]
     # solves for initial mass and pressure in bubble self-consistently
