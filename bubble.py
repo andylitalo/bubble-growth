@@ -97,8 +97,8 @@ def grow(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
             CO2 equation of state [kg/m^3]
     """
     # prep arrays for interpolation
-    c_s_interp_arrs = polyco2.calc_c_s_prep(polyol_data_file)
-    if_interp_arrs = polyco2.calc_if_tension_prep(polyol_data_file,
+    c_s_interp_arrs = polyco2.load_c_s_arr(polyol_data_file)
+    if_interp_arrs = polyco2.load_if_tension_arr(polyol_data_file,
                                           if_tension_model=if_tension_model)
     c_bulk = np.interp(p_s, *c_s_interp_arrs) # computes bulk CO2 concentration
     if D == -1:

@@ -90,7 +90,7 @@ def calc_dcdt_cyl(r_arr, c_arr, fixed_params):
         the boundary conditions)
     """
     # extracts fixed parameters
-    dc, polyol_data_file = fixed_params
+    dc, interp_arrs = fixed_params
     # extracts just the concentrations that will change (i = 1...N-1)
     c_arr_c = c_arr[1:-1]
     # and their corresponding radii
@@ -100,7 +100,7 @@ def calc_dcdt_cyl(r_arr, c_arr, fixed_params):
 
     # FIRST TERM: 1/r * D(c) * dc/dr
     # computes diffusivity at each point
-    D_arr = np.asarray([polyco2.calc_D_of_c(c, polyol_data_file) \
+    D_arr = np.asarray([polyco2.calc_D_of_c_raw(c, *interp_arrs) \
                                                     for c in c_arr_c])
     # computes spatial derivative of concentration dc/dr with leapfrog method
     dcdr_arr = (c_arr[2:] - c_arr[:-2]) / (2*dr_arr)
@@ -108,7 +108,7 @@ def calc_dcdt_cyl(r_arr, c_arr, fixed_params):
 
     # SECOND TERM: dD/dc * (dc/dr)^2
     # computes dD/dc [m^2/s / kg/m^3]
-    dDdc_arr = np.asarray([polyco2.calc_dDdc(c, dc, polyol_data_file) \
+    dDdc_arr = np.asarray([polyco2.calc_dDdc_raw(c, dc, *interp_arrs) \
                                                     for c in c_arr_c])
     term2 = dDdc_arr * (dcdr_arr)**2
 
@@ -161,8 +161,12 @@ def go(dt, t_f, r_arr, c_0, dcdt_fn, bc_specs_list, dc, polyol_data_file):
     t = [0]
     c = [c_0]
 
+    # loads arrays for interpolation
+    p_arr, D_sqrt_arr, D_exp_arr = polyco2.load_D_arr(polyol_data_file)
+    c_s_arr, p_s_arr = polyco2.load_c_s_arr(polyol_data_file)
+    interp_arrs = (c_s_arr, p_s_arr, p_arr, D_sqrt_arr, D_exp_arr)
     # stores fixed parameters
-    fixed_params = (dc, polyol_data_file)
+    fixed_params = (dc, interp_arrs)
     # applies Euler's method to estimate bubble growth over time
     # the second condition provides cutoff for shrinking the bubble
     while t[-1] <= t_f:
@@ -171,6 +175,7 @@ def go(dt, t_f, r_arr, c_0, dcdt_fn, bc_specs_list, dc, polyol_data_file):
                             bc_specs_list, fixed_params)
         # stores properties at new time step in lists
         update_props(props, t, c)
+        print('t = {0:.2g} s of {1:.2g} s.'.format(t[-1], t_f))
 
     return t, c
 
