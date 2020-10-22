@@ -22,10 +22,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def all_props(t, t_nuc, props_list, x_log=False, y_lim=[1E-3, 1E4], 
+def all_props(t, t_nuc, props_list, x_log=False, y_lim=[1E-3, 1E4],
               title='Bubble of CO2 Along Channel in V360'):
     """
-    Plots all properties during bubble growth trajectory. Assumes 
+    Plots all properties during bubble growth trajectory. Assumes
     input data are in SI units and converts to more convenient units
     so all values can be plotted on the same plot.
     """
@@ -54,25 +54,20 @@ def all_props(t, t_nuc, props_list, x_log=False, y_lim=[1E-3, 1E4],
     ax.set_title(title, fontsize=20)
     ax.tick_params(axis='both', labelsize=12)
 
-    # moves legend outside box
     # puts legend outside of plot box
-    box = ax.get_position()
-    ax.set_position([box.x0, box.y0, box.width*0.65, box.height])
-    legend_x = 1
-    legend_y = 0.5
-    plt.legend(loc='center left', fontsize=14, bbox_to_anchor=(legend_x, legend_y))
-    
+    legend(ax)
+
     return ax
 
 
 def diff(x_list, y_list, label_list, x_shift, x_conv, y_conv, x_label,
            y_label, title, x_log=False, y_log=False, frac=False):
     """
-    Same as series but reformats so all the y's are (y_list[i] - y_list[0]) / 
+    Same as series but reformats so all the y's are (y_list[i] - y_list[0]) /
     y_list[0].
     This means there will be one fewer series than given (because it does not
     plot the trivial case of y_list[0] - y_list[0]).
-    If x_list and y_list have N entries, then label_list should have N-1 
+    If x_list and y_list have N entries, then label_list should have N-1
     (excludes the "ground truth"). If the label_list has length N, then the
     ground truth will be shown with the corresponding label.
     """
@@ -80,12 +75,12 @@ def diff(x_list, y_list, label_list, x_shift, x_conv, y_conv, x_label,
     y_true = np.array(y_list[0])
     x_diff_list = []
     y_diff_list = []
-        
+
     if len(label_list) == len(y_list):
         # adds ground truth
         x_diff_list += [x_true]
         y_diff_list += [y_true]
-        
+
     for i in range(1, len(y_list)):
         y_interp = np.interp(x_true, x_list[i], y_list[i])
         y_diff = np.abs(y_interp - y_true)
@@ -93,10 +88,21 @@ def diff(x_list, y_list, label_list, x_shift, x_conv, y_conv, x_label,
             y_diff /= y_true
         x_diff_list += [x_true]
         y_diff_list += [y_diff]
-        
+
     return series(x_diff_list, y_diff_list, label_list, x_shift, x_conv, y_conv,
                   x_label, y_label, title, x_log=x_log, y_log=y_log)
-        
+
+
+def legend(ax):
+    """Adds legend outside box."""
+    # puts legend outside of plot box
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0, box.width, box.height])
+    legend_x = 1
+    legend_y = 0.5
+    plt.legend(loc='center left', fontsize=14, bbox_to_anchor=(legend_x, legend_y))
+
+
 
 def series(x_list, y_list, label_list, x_shift, x_conv, y_conv, x_label,
            y_label, title, x_log=False, y_log=False):
@@ -107,14 +113,14 @@ def series(x_list, y_list, label_list, x_shift, x_conv, y_conv, x_label,
         x = x_list[i]
         y = y_list[i]
         ax.plot((np.array(x)-x_shift)*x_conv, np.array(y)*y_conv, label=label)
-     
+
     if x_log:
         ax.set_xscale('log')
-    if y_log: 
+    if y_log:
         ax.set_yscale('log')
     ax.set_xlabel(x_label, fontsize=18)
     ax.set_ylabel(y_label, fontsize=18)
     ax.set_title(title, fontsize=20)
     plt.legend()
-    
+
     return ax

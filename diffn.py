@@ -167,6 +167,7 @@ def go(dt, t_f, r_arr, c_0, dcdt_fn, bc_specs_list, dc, polyol_data_file):
     interp_arrs = (c_s_arr, p_s_arr, p_arr, D_sqrt_arr, D_exp_arr)
     # stores fixed parameters
     fixed_params = (dc, interp_arrs)
+
     # applies Euler's method to estimate bubble growth over time
     # the second condition provides cutoff for shrinking the bubble
     while t[-1] <= t_f:
@@ -175,7 +176,7 @@ def go(dt, t_f, r_arr, c_0, dcdt_fn, bc_specs_list, dc, polyol_data_file):
                             bc_specs_list, fixed_params)
         # stores properties at new time step in lists
         update_props(props, t, c)
-        print('t = {0:.2g} s of {1:.2g} s.'.format(t[-1], t_f))
+        # print('t = {0:.2g} s of {1:.2g} s.'.format(t[-1], t_f))
 
     return t, c
 
