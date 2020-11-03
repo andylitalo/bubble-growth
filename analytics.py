@@ -102,7 +102,7 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
         legend_y = 0.5
         plt.legend(loc='center left', bbox_to_anchor=(legend_x, legend_y))
 
-    results = (t, m, D, p, p_bubble, if_tension, c_s, R, rho_co2)
+    results = (t, m, D, p, p_bubble, if_tension, c_s, c_bulk, R, rho_co2)
 
     return t_nuc, results
 
