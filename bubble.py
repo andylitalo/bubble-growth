@@ -96,77 +96,57 @@ def grow(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
             density of CO2 in bubble at each time step based on pressure and
             CO2 equation of state [kg/m^3]
     """
-    # prep arrays for interpolation
-    c_s_interp_arrs = polyco2.load_c_s_arr(polyol_data_file)
-    if_interp_arrs = polyco2.load_if_tension_arr(polyol_data_file,
-                                          if_tension_model=if_tension_model)
-    c_bulk = np.interp(p_s, *c_s_interp_arrs) # computes bulk CO2 concentration
-    if D == -1:
-        D = polyco2.calc_D(p_s, polyol_data_file) # assumes diffusivity of saturation pressure
-    # creates interpolation fn for density of CO2 based on equation of state
-    f_rho_co2 = polyco2.interp_rho_co2(eos_co2_file)
+    t, m, D, p, p_bubble, if_tension, c_s, \
+    c_bulk, R, rho_co2, t_f, fixed_params = init(p_in, p_atm, p_s, t_nuc, R_nuc,
+                                            v, L, D, c_bulk, polyol_data_file,
+                                            eos_co2_file, if_tension_model,
+                                            d_tolman, implicit)
 
-    # initializes lists of key bubble properties
-    p = [flow.calc_p(p_in, p_atm, v, t_nuc, L)]
-    c_s = [np.interp(p[0], *c_s_interp_arrs)]
-    R = [R_nuc]
-    # solves for initial mass and pressure in bubble self-consistently
-    m0 = geo.v_sphere(R_nuc)*f_rho_co2(p[0])
-    p_bubble0 = p[0]
-    m_init, p_bubble_init = calc_m_p_bubble(R[0], p[0], m0, p_bubble0,
-                                            if_interp_arrs, f_rho_co2, d_tolman)
-    p_bubble = [p_bubble_init]
-    m = [m_init]
-    if_tension = [polyco2.calc_if_tension(p_bubble[0], if_interp_arrs, R[0],
-                                  d_tolman=d_tolman)]
-    # initial bubble density [kg/m^3]
-    rho_co2 = [f_rho_co2(p_bubble[0])]
-
-    # calcultes the time at which pressure reaches saturation pressure
-    t_s = flow.calc_t_s(p_in, p_atm, p_s, v, L)
-    # ensures that nucleation time occurs after supersaturation achieved
-    t_nuc = max(t_s, t_nuc)
-    # initializes timeline [s]
-    t = [t_nuc]
-    # defines final time [s]
-    t_f = L/v
-
-    # collects fixed parameters
-    fixed_params = (t_nuc, D, p_in, p_s, p_atm, v, L, c_bulk, c_s_interp_arrs,
-                    if_interp_arrs, f_rho_co2, d_tolman, implicit)
     # applies Euler's method to estimate bubble growth over time
     # the second condition provides cutoff for shrinking the bubble
     while t[-1] <= t_f:
         if adaptive_dt:
-            # calculates properties for two time steps
-            props_a = time_step(dt, t[-1], m[-1], p[-1], if_tension[-1],
-                              R[-1], rho_co2[-1], fixed_params,
-                              drop_t_term=drop_t_term)
-            props_b = time_step(2*dt, t[-1], m[-1], p[-1], if_tension[-1],
-                              R[-1], rho_co2[-1], fixed_params,
-                              drop_t_term=drop_t_term)
-            # extracts estimated value of the radius
-            R_a = props_a[-2]
-            R_b = props_b[-2]
-            # checks if the discrepancy in the radius is below tolerance
-            if np.abs( (R_a - R_b) / R_a) <= tol_R:
-                # increases time step for next calculation
-                dt *= (1 + alpha)
-                # takes properties calculated with smaller time step
-                props = props_a
-                # saves new properties and advances forward
-                update_props(props, t, m, p, p_bubble, if_tension, c_s, R, rho_co2)
-            else:
-                # does not advance forward, reduces time step
-                dt /= 2
+            dt, props = adaptive_time_step(dt, t, m, p, if_tension, R, rho_co2,
+                                        fixed_params, tol_R, alpha, drop_t_term)
         else:
             # calculates properties after one time step
             props = time_step(dt, t[-1], m[-1], p[-1], if_tension[-1], R[-1],
                             rho_co2[-1], fixed_params, drop_t_term=drop_t_term)
-            # saves properties
-            update_props(props, t, m, p, p_bubble, if_tension, c_s, R, rho_co2)
+
+        # saves properties
+        update_props(props, t, m, p, p_bubble, if_tension, c_s, R, rho_co2)
 
     return t, m, D, p, p_bubble, if_tension, c_s, c_bulk, R, rho_co2
+
+
+def adaptive_time_step(dt, t, m, p, if_tension, R, rho_co2, fixed_params, tol_R,
+                        alpha, drop_t_term):
+    """
+    """
+    while True:
+        # calculates properties for two time steps
+        props_a = time_step(dt, t[-1], m[-1], p[-1], if_tension[-1],
+                          R[-1], rho_co2[-1], fixed_params,
+                          drop_t_term=drop_t_term)
+        props_b = time_step(2*dt, t[-1], m[-1], p[-1], if_tension[-1],
+                          R[-1], rho_co2[-1], fixed_params,
+                          drop_t_term=drop_t_term)
+        # extracts estimated value of the radius
+        R_a = props_a[-2]
+        R_b = props_b[-2]
+        # checks if the discrepancy in the radius is below tolerance
+        if np.abs( (R_a - R_b) / R_a) <= tol_R:
+            # increases time step for next calculation
+            dt *= (1 + alpha)
+            # takes properties calculated with smaller time step
+            props = props_a
+            # breaks loop now that time step met tolerance
+            break
+        else:
+            # does not advance forward, reduces time step
+            dt /= 2
+
+    return dt, props
 
 
 def calc_dmdt(D, p_s, p, R, t, t_nuc, dt, c_s_interp_arrs, tol=1E-9,
@@ -395,6 +375,55 @@ def calc_m_R_p_bubble(m0, R0, p_bubble0, c_bulk, c_s, D, m_prev, p, t, dt,
     m, R, p_bubble = soln.x
 
     return m, R, p_bubble
+
+
+def init(p_in, p_atm, p_s, t_nuc, R_nuc, v, L, D, c_bulk, polyol_data_file,
+            eos_co2_file, if_tension_model, d_tolman, implicit):
+    """
+    Initializes parameters used in grow() for bubble growth.
+
+    """
+    # prep arrays for interpolation
+    c_s_interp_arrs = polyco2.load_c_s_arr(polyol_data_file)
+    if_interp_arrs = polyco2.load_if_tension_arr(polyol_data_file,
+                                          if_tension_model=if_tension_model)
+    c_bulk = np.interp(p_s, *c_s_interp_arrs) # computes bulk CO2 concentration
+    if D == -1:
+        D = polyco2.calc_D(p_s, polyol_data_file) # assumes diffusivity of saturation pressure
+    # creates interpolation fn for density of CO2 based on equation of state
+    f_rho_co2 = polyco2.interp_rho_co2(eos_co2_file)
+
+    # initializes lists of key bubble properties
+    p = [flow.calc_p(p_in, p_atm, v, t_nuc, L)]
+    c_s = [np.interp(p[0], *c_s_interp_arrs)]
+    R = [R_nuc]
+    # solves for initial mass and pressure in bubble self-consistently
+    m0 = geo.v_sphere(R_nuc)*f_rho_co2(p[0])
+    p_bubble0 = p[0]
+    m_init, p_bubble_init = calc_m_p_bubble(R[0], p[0], m0, p_bubble0,
+                                            if_interp_arrs, f_rho_co2, d_tolman)
+    p_bubble = [p_bubble_init]
+    m = [m_init]
+    if_tension = [polyco2.calc_if_tension(p_bubble[0], if_interp_arrs, R[0],
+                                  d_tolman=d_tolman)]
+    # initial bubble density [kg/m^3]
+    rho_co2 = [f_rho_co2(p_bubble[0])]
+
+    # calcultes the time at which pressure reaches saturation pressure
+    t_s = flow.calc_t_s(p_in, p_atm, p_s, v, L)
+    # ensures that nucleation time occurs after supersaturation achieved
+    t_nuc = max(t_s, t_nuc)
+    # initializes timeline [s]
+    t = [t_nuc]
+    # defines final time [s]
+    t_f = L/v
+
+    # collects fixed parameters
+    fixed_params = (t_nuc, D, p_in, p_s, p_atm, v, L, c_bulk, c_s_interp_arrs,
+                    if_interp_arrs, f_rho_co2, d_tolman, implicit)
+
+    return t, m, D, p, p_bubble, if_tension, c_s, c_bulk, R, rho_co2, t_f, \
+            fixed_params
 
 
 def scf_bubble_fn(R, p_bubble, m, p, f_rho_co2, if_interp_arrs, d_tolman):

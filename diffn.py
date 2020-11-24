@@ -15,9 +15,12 @@ sys.path.append('../libs/')
 # imports standard libraries
 import numpy as np
 
-
 # imports custom libraries
 import polyco2
+import flow
+
+# conversions
+from conversions import *
 
 
 
@@ -123,10 +126,10 @@ def calc_dcdt_cyl(r_arr, c_arr, fixed_params):
     return dcdt
 
 
-def go(dt, t_f, r_arr, c_0, dcdt_fn, bc_specs_list, dc, polyol_data_file):
+def go(dt, t_f, R_min, R_o, N, c_0, dcdt_fn, bc_specs_list,
+        eta_i, eta_o, d, L, Q_i, Q_o, p_s, dc_c_s_frac, polyol_data_file):
     """
-    Diffuses CO2 throughout system.
-
+    Diffuses CO2 throughout system with concentration-dependent diffusivity.
 
     Parameters
     ----------
@@ -157,17 +160,9 @@ def go(dt, t_f, r_arr, c_0, dcdt_fn, bc_specs_list, dc, polyol_data_file):
         concentration profiles over time [kg CO2 / m^3 polyol-CO2], M time
         steps and N points in space
     """
-    # initializes system
-    t = [0]
-    c = [c_0]
-
-    # loads arrays for interpolation
-    p_arr, D_sqrt_arr, D_exp_arr = polyco2.load_D_arr(polyol_data_file)
-    c_s_arr, p_s_arr = polyco2.load_c_s_arr(polyol_data_file)
-    interp_arrs = (c_s_arr, p_s_arr, p_arr, D_sqrt_arr, D_exp_arr)
-    # stores fixed parameters
-    fixed_params = (dc, interp_arrs)
-
+    t, c, r_arr, R_i, v, \
+    c_0, c_s, t_f, fixed_params = init(R_min, R_o, N, eta_i, eta_o, d, L, Q_i,
+                                        Q_o, p_s, dc_c_s_frac, polyol_data_file)
     # applies Euler's method to estimate bubble growth over time
     # the second condition provides cutoff for shrinking the bubble
     while t[-1] <= t_f:
@@ -179,6 +174,40 @@ def go(dt, t_f, r_arr, c_0, dcdt_fn, bc_specs_list, dc, polyol_data_file):
         # print('t = {0:.2g} s of {1:.2g} s.'.format(t[-1], t_f))
 
     return t, c
+
+
+def init(R_min, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s, dc_c_s_frac,
+                        polyol_data_file):
+    """
+    Initializes parameters for go().
+
+    """
+    # creates grid of radii from bubble radius to inner wall of capillary [m]
+    r_arr = np.linspace(R_min, R_o, N+1)
+
+    # computes inner stream radius [m] and velocity [m/s]
+    _, R_i, v = flow.get_dp_R_i_v_max(eta_i, eta_o, L, Q_i*uLmin_2_m3s,
+                                        Q_o*uLmin_2_m3s, R_o, SI=True)
+
+    # creates initial concentration profile [kg CO2 / m^3 polyol-CO2]
+    c_0 = np.zeros([N+1])
+    c_s = polyco2.calc_c_s(p_s, polyol_data_file)
+    c_0[r_arr <= R_i] = c_s
+    dc = c_s*dc_c_s_frac
+    t_f = d/v
+
+    # initializes system
+    t = [0]
+    c = [c_0]
+
+    # loads arrays for interpolation
+    p_arr, D_sqrt_arr, D_exp_arr = polyco2.load_D_arr(polyol_data_file)
+    c_s_arr, p_s_arr = polyco2.load_c_s_arr(polyol_data_file)
+    interp_arrs = (c_s_arr, p_s_arr, p_arr, D_sqrt_arr, D_exp_arr)
+    # stores fixed parameters
+    fixed_params = (dc, interp_arrs)
+
+    return t, c, r_arr, R_i, v, c_0, c_s, t_f, fixed_params
 
 
 def neumann(c, i, j, dcdr, r_arr):
