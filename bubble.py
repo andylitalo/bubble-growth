@@ -30,7 +30,8 @@ cm2s_2_m2s = 1E-4
 def grow(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
                      polyol_data_file, eos_co2_file, adaptive_dt=True,
                      if_tension_model='lin', implicit=False, d_tolman=0,
-                     tol_R=0.001, alpha=0.3, D=-1, drop_t_term=False):
+                     tol_R=0.001, alpha=0.3, D=-1, drop_t_term=False,
+                     time_step_fn=time_step):
     """
     Solves for bubble growth based on Epstein and Plesset (1950) with
     modifications for changing pressure (p) and interfacial tension (if_tension).
@@ -98,20 +99,21 @@ def grow(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
     """
     t, m, D, p, p_bubble, if_tension, c_s, \
     c_bulk, R, rho_co2, t_f, fixed_params = init(p_in, p_atm, p_s, t_nuc, R_nuc,
-                                            v, L, D, c_bulk, polyol_data_file,
+                                            v, L, D, polyol_data_file,
                                             eos_co2_file, if_tension_model,
                                             d_tolman, implicit)
 
     # applies Euler's method to estimate bubble growth over time
     # the second condition provides cutoff for shrinking the bubble
     while t[-1] <= t_f:
+        time_step_params = (t[-1], m[-1], p[-1],
+                                    if_tension[-1], R[-1], rho_co2[-1],
+                                    fixed_params, drop_t_term)
         if adaptive_dt:
-            dt, props = adaptive_time_step(dt, t, m, p, if_tension, R, rho_co2,
-                                        fixed_params, tol_R, alpha, drop_t_term)
+            dt, props = adaptive_time_step(dt, time_step_params, time_step_fn, tol_R, alpha)
         else:
             # calculates properties after one time step
-            props = time_step(dt, t[-1], m[-1], p[-1], if_tension[-1], R[-1],
-                            rho_co2[-1], fixed_params, drop_t_term=drop_t_term)
+            props = time_step_fn(dt, *time_step_params)
 
         # saves properties
         update_props(props, t, m, p, p_bubble, if_tension, c_s, R, rho_co2)
@@ -119,19 +121,14 @@ def grow(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
     return t, m, D, p, p_bubble, if_tension, c_s, c_bulk, R, rho_co2
 
 
-def adaptive_time_step(dt, t, m, p, if_tension, R, rho_co2, fixed_params, tol_R,
-                        alpha, drop_t_term):
+def adaptive_time_step(dt, time_step_params, time_step_fn, tol_R, alpha):
     """
     """
     while True:
         # calculates properties for two time steps
-        props_a = time_step(dt, t[-1], m[-1], p[-1], if_tension[-1],
-                          R[-1], rho_co2[-1], fixed_params,
-                          drop_t_term=drop_t_term)
-        props_b = time_step(2*dt, t[-1], m[-1], p[-1], if_tension[-1],
-                          R[-1], rho_co2[-1], fixed_params,
-                          drop_t_term=drop_t_term)
-        # extracts estimated value of the radius
+        props_a = time_step_fn(dt, *time_step_params)
+        props_b = time_step_fn(2*dt, *time_step_params)
+        # extracts estimated value of the radius (index -2 in properties list)
         R_a = props_a[-2]
         R_b = props_b[-2]
         # checks if the discrepancy in the radius is below tolerance
@@ -202,6 +199,35 @@ def calc_dmdt(D, p_s, p, R, t, t_nuc, dt, c_s_interp_arrs, tol=1E-9,
         dmdt2 = (4*np.pi*R**2*D) * (c_bulk - c_s) * (1 / np.sqrt(np.pi*D*t))
 
     dmdt = dmdt1 + dmdt2
+
+    return dmdt
+
+
+def calc_dmdt_dcdr_fix_D(r_arr, c, R, D):
+    """
+    Calculates the time-derivative of the mass enclosed inside a
+    CO2 bubble under the given conditions. The formula is modified
+    from the widely used Epstein-Plesset formula (1950) to include
+    the effect of changing pressure.
+
+    Parameters
+    ----------
+    r_arr : (N x 1) numpy array of floats
+        grid of radii where r = 0 corresponds to surface of bubble [m]
+    c : (N x 1) numpy array of floats
+        concentration of CO2 at each point in r_arr [kg/m^3]
+    D : float
+        diffusivity of CO2 in polyol [m^2/s]
+    R : float
+        current radius of the bubble [m]
+
+    Returns:
+    dmdt : float
+        Time-derivative of the mass enclosed in the bubble [kg/s]
+    """
+    # concentration gradient at interface of bubble [kg/m^3 / m]
+    dcdr = (c[1] - c[0]) / (r_arr[1] - r_arr[0])
+    dmdt = (4*np.pi*R**2*D)*dcdr
 
     return dmdt
 
@@ -377,7 +403,7 @@ def calc_m_R_p_bubble(m0, R0, p_bubble0, c_bulk, c_s, D, m_prev, p, t, dt,
     return m, R, p_bubble
 
 
-def init(p_in, p_atm, p_s, t_nuc, R_nuc, v, L, D, c_bulk, polyol_data_file,
+def init(p_in, p_atm, p_s, t_nuc, R_nuc, v, L, D, polyol_data_file,
             eos_co2_file, if_tension_model, d_tolman, implicit):
     """
     Initializes parameters used in grow() for bubble growth.
@@ -529,7 +555,7 @@ def scf_bubble_impl(m, R, p_bubble, c_bulk, c_s, D, m_prev,
 
 
 def time_step(dt, t_prev, m_prev, p_prev, if_tension_prev, R_prev, rho_co2_prev,
-           fixed_params, drop_t_term=False):
+           fixed_params, drop_t_term):
     """
     Advances system forward by one time step.
     """
@@ -559,6 +585,37 @@ def time_step(dt, t_prev, m_prev, p_prev, if_tension_prev, R_prev, rho_co2_prev,
         soln = calc_m_R_p_bubble(m0, R0, p_bubble0, c_bulk, c_s, D, m_prev, p,
                                  t-t_nuc, dt, if_interp_arrs, f_rho_co2, d_tolman)
         m, R, p_bubble = soln
+
+    if_tension = polyco2.calc_if_tension(p_bubble, if_interp_arrs, R, d_tolman=d_tolman) # [N/m]]
+    rho_co2 = f_rho_co2(p_bubble) # [kg/m^3]
+
+    return dt, t, m, p, p_bubble, if_tension, c_s, R, rho_co2
+
+
+def time_step_dcdr_fix_D(dt, t_prev, m_prev, if_tension_prev, R_prev,
+                        rho_co2_prev, r_arr, c_arr, fixed_params):
+    """
+    Advances system forward by one time step using dc/dr direct calculation and
+    with fixed diffusivity D.
+    """
+    # some of the fixed parameters needed for time_step() are not required here
+    _, D, p_in, p_s, p_atm, v, L, _, c_s_interp_arrs, \
+                    if_interp_arrs, f_rho_co2, d_tolman, _ = fixed_params
+    t = t_prev + dt # increments time forward [s]
+    p = flow.calc_p(p_in, p_atm, v, t, L) # computes new pressure along observation capillary [Pa]
+    c_s = np.interp(p, *c_s_interp_arrs) # interpolates saturation concentration of CO2 [kg CO2 / m^3 polyol-CO2]
+    # guess for self-consistently solving for radius and pressure of bubble
+    R0 = (3/(4*np.pi)*m_prev/rho_co2_prev)**(1./3) #p[-1] + 2*if_tension[-1]/R0
+    p_bubble0 = p + 2*if_tension_prev/R0 #p_bubble[-1]
+
+
+
+    # updates mass with explicit Euler method--inputs are i^th terms,
+    # so we pass in R[-1] since R has not been updated to R_{i+1} yet
+    m = m_prev + dt*calc_dmdt_dcdr_fix_D(r_arr, c_arr, R_prev, D)
+    # self-consistently solves for radius and pressure of bubble
+    R, p_bubble = calc_R_p_bubble(m, p, R0, p_bubble0, if_interp_arrs,
+                                  f_rho_co2, d_tolman)
 
     if_tension = polyco2.calc_if_tension(p_bubble, if_interp_arrs, R, d_tolman=d_tolman) # [N/m]]
     rho_co2 = f_rho_co2(p_bubble) # [kg/m^3]

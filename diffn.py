@@ -126,6 +126,60 @@ def calc_dcdt_cyl(r_arr, c_arr, fixed_params):
     return dcdt
 
 
+def calc_dcdt_sph_fix_D(r_arr, c_arr, fixed_params):
+    """
+    Computes the time derivative of concentration dc/dt in spherical
+    coordinates assuming concentration dependent diffusivity constant.
+
+    In spherical coordinates Fick's law of dc/dt = div(D(c)grad(c)) becomes:
+
+            dc/dt = 2/r*D(c)*dc/dr + dD/dc*(dc/dr)^2 + D(c)*d2c/dr2
+
+    assuming spherical symmetry.
+
+    Parameters
+    ----------
+    r_arr : numpy array of N+1 floats
+        radial coordinates of points in mesh [m]
+    c_arr : numpy array of N+1 floats
+        concentrations of CO2 at each of the points in r_arr
+        [kg CO2 / m^3 polyol-co2]
+    fixed_params: list
+        D : float
+            diffusivity of CO2 in polyol (fixed) [m^2/s]
+
+    Returns
+    -------
+    dcdt : numpy array of N-1 floats
+        time derivatives of concentration at each of the interior mesh points
+        (the concentrations at the end points at i=0 and i=N+1 are computed by
+        the boundary conditions)
+    """
+    # extracts fixed parameters
+    D = fixed_params
+    # extracts just the concentrations that will change (i = 1...N-1)
+    c_arr_c = c_arr[1:-1]
+    # and their corresponding radii
+    r_arr_c = r_arr[1:-1]
+    # and their corresponding grid spacings
+    dr_arr = r_arr[2:] - r_arr[1:-1]
+
+    # FIRST TERM: 2/r * D(c) * dc/dr
+    # computes spatial derivative of concentration dc/dr with leapfrog method
+    dcdr_arr = (c_arr[2:] - c_arr[:-2]) / (2*dr_arr)
+    term1 = 2/r_arr_c * D * dcdr_arr
+
+    # SECOND TERM: D(c) * d2c/dr2
+    # computes second spatial derivative of concentration with central
+    # difference formula
+    d2cdr2_arr = (c_arr[2:] - 2*c_arr[1:-1] + c_arr[:-2]) / (dr_arr**2)
+    term2 = D * d2cdr2_arr
+
+    dcdt = term1 + term2
+
+    return dcdt
+
+
 def go(dt, t_f, R_min, R_o, N, c_0, dcdt_fn, bc_specs_list,
         eta_i, eta_o, d, L, Q_i, Q_o, p_s, dc_c_s_frac, polyol_data_file):
     """
@@ -186,7 +240,7 @@ def init(R_min, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s, dc_c_s_frac,
     r_arr = np.linspace(R_min, R_o, N+1)
 
     # computes inner stream radius [m] and velocity [m/s]
-    _, R_i, v = flow.get_dp_R_i_v_max(eta_i, eta_o, L, Q_i*uLmin_2_m3s,
+    dp, R_i, v = flow.get_dp_R_i_v_max(eta_i, eta_o, L, Q_i*uLmin_2_m3s,
                                         Q_o*uLmin_2_m3s, R_o, SI=True)
 
     # creates initial concentration profile [kg CO2 / m^3 polyol-CO2]
@@ -207,7 +261,7 @@ def init(R_min, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s, dc_c_s_frac,
     # stores fixed parameters
     fixed_params = (dc, interp_arrs)
 
-    return t, c, r_arr, R_i, v, c_0, c_s, t_f, fixed_params
+    return t, c, r_arr, dp, R_i, v, c_0, c_s, t_f, fixed_params
 
 
 def neumann(c, i, j, dcdr, r_arr):
