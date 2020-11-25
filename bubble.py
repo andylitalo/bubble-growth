@@ -78,7 +78,7 @@ def grow(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
         p : list of N floats
             pressure at each time step assuming linear pressure drop along
             channel [Pa]
-        p_bubble : list of N floats
+        p_bub : list of N floats
             pressure inside bubble at each time step
         if_tension : list of N floats
             interfacial tension along bubble surface at each time step based on
@@ -97,7 +97,7 @@ def grow(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
             density of CO2 in bubble at each time step based on pressure and
             CO2 equation of state [kg/m^3]
     """
-    t, m, D, p, p_bubble, if_tension, c_s, \
+    t, m, D, p, p_bub, if_tension, c_s, \
     c_bulk, R, rho_co2, t_f, fixed_params = init(p_in, p_atm, p_s, t_nuc, R_nuc,
                                             v, L, D, polyol_data_file,
                                             eos_co2_file, if_tension_model,
@@ -116,9 +116,9 @@ def grow(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
             props = time_step_fn(dt, *time_step_params)
 
         # saves properties
-        update_props(props, t, m, p, p_bubble, if_tension, c_s, R, rho_co2)
+        update_props(props, t, m, p, p_bub, if_tension, c_s, R, rho_co2)
 
-    return t, m, D, p, p_bubble, if_tension, c_s, c_bulk, R, rho_co2
+    return t, m, D, p, p_bub, if_tension, c_s, c_bulk, R, rho_co2
 
 
 def adaptive_time_step(dt, time_step_params, time_step_fn, tol_R, alpha):
@@ -232,7 +232,7 @@ def calc_dmdt_dcdr_fix_D(r_arr, c, R, D):
     return dmdt
 
 
-def calc_m_p_bubble(R, p, m0, p_bubble0, if_interp_arrs, f_rho_co2, d_tolman):
+def calc_m_p_bub(R, p, m0, p_bub0, if_interp_arrs, f_rho_co2, d_tolman):
     """
     Calculates the radius of the bubble and its internal pressure
     self-consistently given the mass of CO2 inside the bubble and the
@@ -267,23 +267,23 @@ def calc_m_p_bubble(R, p, m0, p_bubble0, if_interp_arrs, f_rho_co2, d_tolman):
     Returns:
     m : float
         mass of CO2 enclosed in the bubble [kg]
-    p_bubble : float
+    p_bub : float
         pressure inside the bubble [Pa]
     """
     def f(variables, args):
         """reorganizes variables and arguments for scipy.optimize.root"""
-        m, p_bubble = variables
+        m, p_bub = variables
         R, p, f_rho_co2, if_interp_arrs, d_tolman = args
 
-        return scf_bubble_fn(R, p_bubble, m, p, f_rho_co2, if_interp_arrs,
+        return scf_bubble_fn(R, p_bub, m, p, f_rho_co2, if_interp_arrs,
                              d_tolman)
 
     # solves for R with nonlinear solver
     args = (R, p, f_rho_co2, if_interp_arrs, d_tolman)
-    soln = scipy.optimize.root(f, (m0, p_bubble0), args=(args,))
-    m, p_bubble = soln.x
+    soln = scipy.optimize.root(f, (m0, p_bub0), args=(args,))
+    m, p_bub = soln.x
 
-    return m, p_bubble
+    return m, p_bub
 
 
 def calc_p_laplace(p, if_interp_arrs, R, d_tolman):
@@ -294,7 +294,7 @@ def calc_p_laplace(p, if_interp_arrs, R, d_tolman):
     return 2*polyco2.calc_if_tension(p, if_interp_arrs, R, d_tolman=d_tolman)/R
 
 
-def calc_R_p_bubble(m, p, R0, p_bubble0, if_interp_arrs, f_rho_co2,
+def calc_R_p_bub(m, p, R0, p_bub0, if_interp_arrs, f_rho_co2,
                     d_tolman):
     """
     Calculates the radius of the bubble and its internal pressure
@@ -328,7 +328,7 @@ def calc_R_p_bubble(m, p, R0, p_bubble0, if_interp_arrs, f_rho_co2,
     -------
     R : float
         radius of the bubble [m]
-    p_bubble : float
+    p_bub : float
         pressure inside the bubble [Pa]
     """
     # solves for R with nonlinear solver
@@ -336,13 +336,13 @@ def calc_R_p_bubble(m, p, R0, p_bubble0, if_interp_arrs, f_rho_co2,
     def f(variables, args):
 
         return scf_bubble_fn(*variables, *args)
-    soln = scipy.optimize.root(f, (R0, p_bubble0), args=(args,)) # solves for R
-    R, p_bubble = soln.x
+    soln = scipy.optimize.root(f, (R0, p_bub0), args=(args,)) # solves for R
+    R, p_bub = soln.x
 
-    return R, p_bubble
+    return R, p_bub
 
 
-def calc_m_R_p_bubble(m0, R0, p_bubble0, c_bulk, c_s, D, m_prev, p, t, dt,
+def calc_m_R_p_bub(m0, R0, p_bub0, c_bulk, c_s, D, m_prev, p, t, dt,
                       if_interp_arrs, f_rho_co2, d_tolman):
     """
     Used for implicit Euler time-stepping.
@@ -362,7 +362,7 @@ def calc_m_R_p_bubble(m0, R0, p_bubble0, c_bulk, c_s, D, m_prev, p, t, dt,
         R_{i+1} [m] (recommended to be previous radius)
     p0 : float
         initial guess for the pressure inside the bubble at the next time step
-        p_bubble_{i+1} [Pa]
+        p_bub_{i+1} [Pa]
     c_bulk : float
         concentration of CO2 in the bulk parent phase [kg/m^3]
     c_s : float
@@ -390,17 +390,17 @@ def calc_m_R_p_bubble(m0, R0, p_bubble0, c_bulk, c_s, D, m_prev, p, t, dt,
         Mass for next time step, m_{i+1}
     R : float
         radius of the bubble for the next time step R_{i+1} [m]
-    p_bubble : float
-        pressure inside the bubble for the next time step p_bubble_{i+1} [Pa]
+    p_bub : float
+        pressure inside the bubble for the next time step p_bub_{i+1} [Pa]
     """
     # solves for R with nonlinear solver
     args = (c_bulk, c_s, D, m_prev, p, t, dt, f_rho_co2, if_interp_arrs, d_tolman)
     def f(variables, args):
         return scf_bubble_impl(*variables, *args)
-    soln = scipy.optimize.root(f, (m0, R0, p_bubble0), args=(args,))
-    m, R, p_bubble = soln.x
+    soln = scipy.optimize.root(f, (m0, R0, p_bub0), args=(args,))
+    m, R, p_bub = soln.x
 
-    return m, R, p_bubble
+    return m, R, p_bub
 
 
 def init(p_in, p_atm, p_s, t_nuc, R_nuc, v, L, D, polyol_data_file,
@@ -425,15 +425,15 @@ def init(p_in, p_atm, p_s, t_nuc, R_nuc, v, L, D, polyol_data_file,
     R = [R_nuc]
     # solves for initial mass and pressure in bubble self-consistently
     m0 = geo.v_sphere(R_nuc)*f_rho_co2(p[0])
-    p_bubble0 = p[0]
-    m_init, p_bubble_init = calc_m_p_bubble(R[0], p[0], m0, p_bubble0,
+    p_bub0 = p[0]
+    m_init, p_bub_init = calc_m_p_bub(R[0], p[0], m0, p_bub0,
                                             if_interp_arrs, f_rho_co2, d_tolman)
-    p_bubble = [p_bubble_init]
+    p_bub = [p_bub_init]
     m = [m_init]
-    if_tension = [polyco2.calc_if_tension(p_bubble[0], if_interp_arrs, R[0],
+    if_tension = [polyco2.calc_if_tension(p_bub[0], if_interp_arrs, R[0],
                                   d_tolman=d_tolman)]
     # initial bubble density [kg/m^3]
-    rho_co2 = [f_rho_co2(p_bubble[0])]
+    rho_co2 = [f_rho_co2(p_bub[0])]
 
     # calcultes the time at which pressure reaches saturation pressure
     t_s = flow.calc_t_s(p_in, p_atm, p_s, v, L)
@@ -448,16 +448,16 @@ def init(p_in, p_atm, p_s, t_nuc, R_nuc, v, L, D, polyol_data_file,
     fixed_params = (t_nuc, D, p_in, p_s, p_atm, v, L, c_bulk, c_s_interp_arrs,
                     if_interp_arrs, f_rho_co2, d_tolman, implicit)
 
-    return t, m, D, p, p_bubble, if_tension, c_s, c_bulk, R, rho_co2, t_f, \
+    return t, m, D, p, p_bub, if_tension, c_s, c_bulk, R, rho_co2, t_f, \
             fixed_params
 
 
-def scf_bubble_fn(R, p_bubble, m, p, f_rho_co2, if_interp_arrs, d_tolman):
+def scf_bubble_fn(R, p_bub, m, p, f_rho_co2, if_interp_arrs, d_tolman):
     """
     Computes residual of the equations governing bubble size:
         1) mass = volume*density (conservation of mass + volume of a sphere)
-        2) p_bubble = p + 2*if_tension/R (Young-Laplace)
-    Used in calc_R_p_bubble and calc_m_p_bubble for self-consistent
+        2) p_bub = p + 2*if_tension/R (Young-Laplace)
+    Used in calc_R_p_bub and calc_m_p_bub for self-consistent
     computation using scipy.optimize.root.
 
     Parameters
@@ -468,7 +468,7 @@ def scf_bubble_fn(R, p_bubble, m, p, f_rho_co2, if_interp_arrs, d_tolman):
         mass of CO2 enclosed in bubble [kg]
     p : float
         pressure in bulk governed by microfluidic flow [Pa]
-    p_bubble : float
+    p_bub : float
         pressure inside bubble, p + Young-Laplace pressure [Pa]
     R : float
         radius of bubble [m]
@@ -483,28 +483,28 @@ def scf_bubble_fn(R, p_bubble, m, p, f_rho_co2, if_interp_arrs, d_tolman):
         for a sphere of gas and Young-Laplace pressure)
     """
     # residual for calculation of R based on spherical geometry
-    res1  = R - ( 3/(4*np.pi)*(m/f_rho_co2(p_bubble)) )**(1/3.)
+    res1  = R - ( 3/(4*np.pi)*(m/f_rho_co2(p_bub)) )**(1/3.)
     # residual for pressure based on Laplace pressure + bulk pressure
-#    if_tension = np.interp(p_bubble, *if_interp_arrs)
-#    res2 = p_bubble - (p + 2*if_tension/R)
-    res2 = p_bubble - (p + calc_p_laplace(p, if_interp_arrs, R, d_tolman))
+#    if_tension = np.interp(p_bub, *if_interp_arrs)
+#    res2 = p_bub - (p + 2*if_tension/R)
+    res2 = p_bub - (p + calc_p_laplace(p, if_interp_arrs, R, d_tolman))
     res = (res1, res2)
 
     return res
 
 
-def scf_bubble_impl(m, R, p_bubble, c_bulk, c_s, D, m_prev,
+def scf_bubble_impl(m, R, p_bub, c_bulk, c_s, D, m_prev,
                     p, t, dt, f_rho_co2, if_interp_arrs, d_tolman):
     """
     Computes residual of the equations governing bubble size:
         1) mass = volume*density (conservation of mass + volume of a sphere)
-        2) p_bubble = p + 2*if_tension/R (Young-Laplace)
+        2) p_bub = p + 2*if_tension/R (Young-Laplace)
         3) implicit Euler using Epstein-Plesset:
             m_{i+1} = m_i + dm/dt|_{t_{i+1}}*dt_i
-    Used in calc_m_R_p_bubble for self-consistent
+    Used in calc_m_R_p_bub for self-consistent
     computation using scipy.optimize.root.
 
-    Note that this solves for R_{i+1}, m_{i+1}, and p_bubble,i+1 because it is
+    Note that this solves for R_{i+1}, m_{i+1}, and p_bub,i+1 because it is
     used for an implicit method.
 
     Parameters
@@ -513,7 +513,7 @@ def scf_bubble_impl(m, R, p_bubble, c_bulk, c_s, D, m_prev,
         mass of CO2 enclosed in bubble [kg]
     R : float
         radius of bubble [m]
-    p_bubble : float
+    p_bub : float
         pressure inside bubble, p + Young-Laplace pressure [Pa]
     c_bulk : float
         concentration of CO2 in the bulk [kg/m^3]
@@ -542,9 +542,9 @@ def scf_bubble_impl(m, R, p_bubble, c_bulk, c_s, D, m_prev,
         with Epstein-Plesset)
     """
     # residual for calculation of R based on spherical geometry
-    res1  = R - ( 3/(4*np.pi)*(m/f_rho_co2(p_bubble)) )**(1/3.)
+    res1  = R - ( 3/(4*np.pi)*(m/f_rho_co2(p_bub)) )**(1/3.)
     # residual for pressure based on Laplace pressure + bulk pressure
-    res2 = p_bubble - (p + calc_p_laplace(p_bubble, if_interp_arrs, R,
+    res2 = p_bub - (p + calc_p_laplace(p_bub, if_interp_arrs, R,
                                           d_tolman))
     # residual for implicit Euler computation with Epstein-Plesset
     dmdt = 4*np.pi*R**2*D*(c_bulk - c_s)*(1/R + 1/np.sqrt(np.pi*D*t))
@@ -566,30 +566,30 @@ def time_step(dt, t_prev, m_prev, p_prev, if_tension_prev, R_prev, rho_co2_prev,
     c_s = np.interp(p, *c_s_interp_arrs) # interpolates saturation concentration of CO2 [kg CO2 / m^3 polyol-CO2]
     # guess for self-consistently solving for radius and pressure of bubble
     R0 = (3/(4*np.pi)*m_prev/rho_co2_prev)**(1./3) #p[-1] + 2*if_tension[-1]/R0
-    p_bubble0 = p + 2*if_tension_prev/R0 #p_bubble[-1]
+    p_bub0 = p + 2*if_tension_prev/R0 #p_bub[-1]
 
     # updates mass with explicit Euler method--inputs are i^th terms,
     # so we pass in R[-1] since R has not been updated to R_{i+1} yet
     m = m_prev + dt*calc_dmdt(D, p_s, p_prev, R_prev, t_prev, t_nuc, dt,
                               c_s_interp_arrs, drop_t_term=drop_t_term)
     # self-consistently solves for radius and pressure of bubble
-    R, p_bubble = calc_R_p_bubble(m, p, R0, p_bubble0, if_interp_arrs,
+    R, p_bub = calc_R_p_bub(m, p, R0, p_bub0, if_interp_arrs,
                                   f_rho_co2, d_tolman)
 
     if implicit:
         # uses explicit time-stepping result for initial guess of implicit
         m0 = m
         R0 = R
-        p_bubble0 = p_bubble
+        p_bub0 = p_bub
         # self-consistently solves implicit Euler equation
-        soln = calc_m_R_p_bubble(m0, R0, p_bubble0, c_bulk, c_s, D, m_prev, p,
+        soln = calc_m_R_p_bub(m0, R0, p_bub0, c_bulk, c_s, D, m_prev, p,
                                  t-t_nuc, dt, if_interp_arrs, f_rho_co2, d_tolman)
-        m, R, p_bubble = soln
+        m, R, p_bub = soln
 
-    if_tension = polyco2.calc_if_tension(p_bubble, if_interp_arrs, R, d_tolman=d_tolman) # [N/m]]
-    rho_co2 = f_rho_co2(p_bubble) # [kg/m^3]
+    if_tension = polyco2.calc_if_tension(p_bub, if_interp_arrs, R, d_tolman=d_tolman) # [N/m]]
+    rho_co2 = f_rho_co2(p_bub) # [kg/m^3]
 
-    return dt, t, m, p, p_bubble, if_tension, c_s, R, rho_co2
+    return dt, t, m, p, p_bub, if_tension, c_s, R, rho_co2
 
 
 def time_step_dcdr_fix_D(dt, t_prev, m_prev, if_tension_prev, R_prev,
@@ -606,7 +606,7 @@ def time_step_dcdr_fix_D(dt, t_prev, m_prev, if_tension_prev, R_prev,
     c_s = np.interp(p, *c_s_interp_arrs) # interpolates saturation concentration of CO2 [kg CO2 / m^3 polyol-CO2]
     # guess for self-consistently solving for radius and pressure of bubble
     R0 = (3/(4*np.pi)*m_prev/rho_co2_prev)**(1./3) #p[-1] + 2*if_tension[-1]/R0
-    p_bubble0 = p + 2*if_tension_prev/R0 #p_bubble[-1]
+    p_bub0 = p + 2*if_tension_prev/R0 #p_bub[-1]
 
 
 
@@ -614,22 +614,22 @@ def time_step_dcdr_fix_D(dt, t_prev, m_prev, if_tension_prev, R_prev,
     # so we pass in R[-1] since R has not been updated to R_{i+1} yet
     m = m_prev + dt*calc_dmdt_dcdr_fix_D(r_arr, c_arr, R_prev, D)
     # self-consistently solves for radius and pressure of bubble
-    R, p_bubble = calc_R_p_bubble(m, p, R0, p_bubble0, if_interp_arrs,
+    R, p_bub = calc_R_p_bub(m, p, R0, p_bub0, if_interp_arrs,
                                   f_rho_co2, d_tolman)
 
-    if_tension = polyco2.calc_if_tension(p_bubble, if_interp_arrs, R, d_tolman=d_tolman) # [N/m]]
-    rho_co2 = f_rho_co2(p_bubble) # [kg/m^3]
+    if_tension = polyco2.calc_if_tension(p_bub, if_interp_arrs, R, d_tolman=d_tolman) # [N/m]]
+    rho_co2 = f_rho_co2(p_bub) # [kg/m^3]
 
-    return dt, t, m, p, p_bubble, if_tension, c_s, R, rho_co2
+    return dt, t, m, p, p_bub, if_tension, c_s, R, rho_co2
 
 
-def update_props(props, t, m, p, p_bubble, if_tension, c_s, R, rho_co2):
+def update_props(props, t, m, p, p_bub, if_tension, c_s, R, rho_co2):
     """
     """
     t += [props[1]]
     m += [props[2]]
     p += [props[3]]
-    p_bubble += [props[4]]
+    p_bub += [props[4]]
     if_tension += [props[5]]
     c_s += [props[6]]
     R += [props[7]]
@@ -655,7 +655,7 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, dt, p_s, R_nuc,
         # calculates new nucleation time as middle of the two bounds (bisection algorithm)
         t_nuc = (t_nuc_lo + t_nuc_hi)/2
         # computes bubble growth trajectory with new bubble nucleation time
-        t, m, D, p, p_bubble, if_tension, c_s, R, f_rho_co2 = \
+        t, m, D, p, p_bub, if_tension, c_s, R, f_rho_co2 = \
                 growth_fn(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
                                  polyol_data_file, eos_co2_file)
         # finds index of timeline corresponding to measurement of bubble size

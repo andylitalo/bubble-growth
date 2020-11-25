@@ -167,7 +167,8 @@ def numerical_eps_pless_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
         # boundary conditions
         # adds bubble radius R to grid of radii since r_arr starts at bubble
         # interface
-        props_flow = diffn.time_step(dt, t_flow[-1], r_arr + R[-1], c[-1], dcdt_fn,
+        fixed_params_flow = (D, R[-1])
+        props_flow = diffn.time_step(dt, t_flow[-1], r_arr, c[-1], dcdt_fn,
                             bc_bub_cap(c_bub[-1], c_max=c_bulk), fixed_params_flow)
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t_flow, c)

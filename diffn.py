@@ -126,7 +126,7 @@ def calc_dcdt_cyl(r_arr, c_arr, fixed_params):
     return dcdt
 
 
-def calc_dcdt_sph_fix_D(r_arr, c_arr, fixed_params):
+def calc_dcdt_sph_fix_D(xi_arr, c_arr, fixed_params):
     """
     Computes the time derivative of concentration dc/dt in spherical
     coordinates assuming concentration dependent diffusivity constant.
@@ -139,14 +139,16 @@ def calc_dcdt_sph_fix_D(r_arr, c_arr, fixed_params):
 
     Parameters
     ----------
-    r_arr : numpy array of N+1 floats
-        radial coordinates of points in mesh [m]
+    xi_arr : numpy array of N+1 floats
+        radial coordinates of points in mesh measured from radius of bubble [m]
     c_arr : numpy array of N+1 floats
         concentrations of CO2 at each of the points in r_arr
         [kg CO2 / m^3 polyol-co2]
     fixed_params: list
         D : float
             diffusivity of CO2 in polyol (fixed) [m^2/s]
+        R : float
+            radius of bubble [m]
 
     Returns
     -------
@@ -156,9 +158,8 @@ def calc_dcdt_sph_fix_D(r_arr, c_arr, fixed_params):
         the boundary conditions)
     """
     # extracts fixed parameters
-    D = fixed_params
-    # extracts just the concentrations that will change (i = 1...N-1)
-    c_arr_c = c_arr[1:-1]
+    D, R = fixed_params
+    r_arr = xi_arr + R
     # and their corresponding radii
     r_arr_c = r_arr[1:-1]
     # and their corresponding grid spacings
@@ -176,6 +177,64 @@ def calc_dcdt_sph_fix_D(r_arr, c_arr, fixed_params):
     term2 = D * d2cdr2_arr
 
     dcdt = term1 + term2
+
+    return dcdt
+
+
+
+def calc_dcdt_sph_fix_D_transf(xi_arr, c_arr, fixed_params):
+    """
+    Computes the time derivative of concentration dc/dt in spherical
+    coordinates assuming concentration dependent diffusivity constant.
+
+    In spherical coordinates Fick's law of dc/dt = div(D(c)grad(c)) becomes:
+
+            du/dt = D*d2u/dxi2
+
+    Where u = c/r and xi = r-R
+
+    assuming spherical symmetry.
+
+    This transformation makes the calculation simpler and *hopefully* less prone
+    to numerical errors.
+
+    Parameters
+    ----------
+    xi_arr : numpy array of N+1 floats
+        radial coordinates of points in mesh, measured from surface of bubble [m]
+    c_arr : numpy array of N+1 floats
+        concentrations of CO2 at each of the points in r_arr
+        [kg CO2 / m^3 polyol-co2]
+    fixed_params: list
+        D : float
+            diffusivity of CO2 in polyol (fixed) [m^2/s]
+        R : float
+            Radius of bubble [m]
+
+    Returns
+    -------
+    dcdt : numpy array of N-1 floats
+        time derivatives of concentration at each of the interior mesh points
+        (the concentrations at the end points at i=0 and i=N+1 are computed by
+        the boundary conditions)
+    """
+    # extracts fixed parameters
+    D, R = fixed_params
+    # and their corresponding grid spacings
+    dxi_arr = (xi_arr[2:] - xi_arr[0:-2])/2
+    # calculates u
+    r_arr = xi_arr + R
+    r_arr_c = r_arr[1:-1]
+    u_arr = c_arr / r_arr
+
+    # D(c) * d2u/dxi2
+    # computes second spatial derivative of concentration with central
+    # difference formula
+    d2udxi2_arr = (u_arr[2:] - 2*u_arr[1:-1] + u_arr[:-2]) / (dxi_arr**2)
+
+    # computes time derivative
+    dudt = D * d2udxi2_arr
+    dcdt = dudt * r_arr_c # c = u*r
 
     return dcdt
 
