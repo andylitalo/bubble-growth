@@ -121,7 +121,7 @@ def numerical_eps_pless_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
                      if_tension_model='lin', implicit=False, d_tolman=0,
                      tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
                      R_min=0, dcdt_fn=diffn.calc_dcdt_sph_fix_D,
-                     time_step_fn=bubble.time_step_dcdr_fix_D):
+                     time_step_fn=bubble.time_step_dcdr):
     """
     Performs numerical computation of Epstein-Plesset model for comparison.
     Once confirmed to provide accurate estimation of Epstein-Plesset result,
@@ -130,10 +130,16 @@ def numerical_eps_pless_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
     """
     # INITIALIZES BUBBLE PARAMETERS
     t_bub, m, D, p, p_bub, if_tension, c_bub, \
-    c_bulk, R, rho_co2, _, fixed_params_bub = bubble.init(p_in, P_ATM, p_s, t_nuc,
+    c_bulk, R, rho_co2, _, fixed_params_tmp = bubble.init(p_in, P_ATM, p_s, t_nuc,
                                             R_nuc, v, L, D, polyol_data_file,
                                             eos_co2_file, if_tension_model,
                                             d_tolman, implicit)
+    # extracts relevant parameters from bubble initiation
+    _, D, p_in, p_s, p_atm, v, L, _, c_s_interp_arrs, \
+    if_interp_arrs, f_rho_co2, d_tolman, _ = fixed_params_tmp
+    # collects parameters relevant for bubble growth
+    fixed_params_bub = (D, p_in, p_s, v, L, c_s_interp_arrs, if_interp_arrs,
+                        f_rho_co2, d_tolman)
 
     # INITIALIZES PARAMETERS FOR DIFFUSION IN BULK
     # starts at nucleation time since we do not consider diffusion before bubble
@@ -146,6 +152,8 @@ def numerical_eps_pless_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
 
     # TIME STEPPING -- BUBBLE NUCLEATES AND GROWS
     while t_bub[-1] <= t_f:
+        # collects parameters for bubble growth
+
         time_step_params = (t_bub[-1], m[-1], if_tension[-1], R[-1],
                                 rho_co2[-1], r_arr, c[-1], fixed_params_bub)
         # BUBBLE GROWTH
@@ -181,7 +189,7 @@ def numerical_eps_pless_vary_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
                      if_tension_model='lin', implicit=False, d_tolman=0,
                      tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
                      R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
-                     time_step_fn=bubble.time_step_dcdr_vary_D):
+                     time_step_fn=bubble.time_step_dcdr):
     """
     Peforms numerical computation of diffusion into bubble from bulk accounting
     for effect of concentration of CO2 on the local diffusivity D.
@@ -195,14 +203,20 @@ def numerical_eps_pless_vary_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
     p_in = P_ATM - dp
     # INITIALIZES BUBBLE PARAMETERS
     t_bub, m, D, p, p_bub, if_tension, c_bub, \
-    c_bulk, R, rho_co2, _, fixed_params_bub = bubble.init(p_in, P_ATM, p_s, t_nuc,
+    c_bulk, R, rho_co2, _, fixed_params_tmp = bubble.init(p_in, P_ATM, p_s, t_nuc,
                                             R_nuc, v, L, -1, polyol_data_file,
                                             eos_co2_file, if_tension_model,
                                             d_tolman, implicit)
+    # extracts relevant parameters from bubble initiation
+    _, D, p_in, p_s, p_atm, v, L, _, c_s_interp_arrs, \
+    if_interp_arrs, f_rho_co2, d_tolman, _ = fixed_params_tmp
 
     # TIME-STEPPING -- BUBBLE NUCLEATES AND GROWS
     while t_bub[-1] <= t_f:
         # collects parameters for time-stepping method
+        D = f(c_bub[-1])
+        fixed_params_bub = (D, p_in, p_s, v, L, c_s_interp_arrs, if_interp_arrs,
+                            f_rho_co2, d_tolman)
         time_step_params = (t_bub[-1], m[-1], if_tension[-1], R[-1],
                                 rho_co2[-1], r_arr, c[-1], fixed_params_bub)
         # BUBBLE GROWTH

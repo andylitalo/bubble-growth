@@ -605,15 +605,16 @@ def scf_bubble_impl(m, R, p_bub, c_bulk, c_s, D, m_prev,
     return res
 
 
-def time_step_dcdr_fix_D(dt, t_prev, m_prev, if_tension_prev, R_prev,
+def time_step_dcdr(dt, t_prev, m_prev, if_tension_prev, R_prev,
                         rho_co2_prev, r_arr, c_arr, fixed_params):
     """
-    Advances system forward by one time step using dc/dr direct calculation and
-    with fixed diffusivity D.
+    Advances system forward by one time step using dc/dr direct calculation.
+    This only considers the concentration at the surface of the bubble, so it
+    assumes constant diffusivity whether it varies with concentration or not.
     """
     # some of the fixed parameters needed for time_step() are not required here
-    _, D, p_in, p_s, p_atm, v, L, _, c_s_interp_arrs, \
-                    if_interp_arrs, f_rho_co2, d_tolman, _ = fixed_params
+    D, p_in, p_s, v, L, c_s_interp_arrs, \
+    if_interp_arrs, f_rho_co2, d_tolman = fixed_params
     t = t_prev + dt # increments time forward [s]
     p = flow.calc_p(p_in, p_atm, v, t, L) # computes new pressure along observation capillary [Pa]
     c_s = np.interp(p, *c_s_interp_arrs) # interpolates saturation concentration of CO2 [kg CO2 / m^3 polyol-CO2]
