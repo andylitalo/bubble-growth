@@ -7,11 +7,16 @@ analytics.py contains functions used for analysis of bubble-growth models.
 @author: Andy
 """
 
+import sys
+sys.path.append('../libs/')
+
 import numpy as np
 import matplotlib.pyplot as plt
 
 # imports custom libraries
 import bubble
+import bubbleflow
+import finitediff as fd
 
 # CONVERSIONS
 s_2_us = 1E6
@@ -23,8 +28,8 @@ m_2_nm = 1E9
 
 
 
-def compare_dcdr(N_list, dt, t_nuc, p_s, R_nuc, p_atm, L,
-                                   p_in, v, polyol_data_file, eos_co2_file):
+def compare_dcdr(N_list, dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v, R_max,
+                    polyol_data_file, eos_co2_file, dt_max=None):
     """
     Compares concentration gradient at interface of bubble b/w Epstein-Plesset
     model and numerical model.
@@ -44,13 +49,18 @@ def compare_dcdr(N_list, dt, t_nuc, p_s, R_nuc, p_atm, L,
     # then performs numerical computation for different grid spacings
     for N in N_list:
         # performs simulation
-        t_flow, c, t_num, m, D, p, p_bub, if_tension, \
-        c_bub, c_bulk, R, rho_co2, v, r_arr = bubbleflow.numerical_eps_pless_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
-                                                 polyol_data_file, eos_co2_file)
+        t_flow, c, t_num, m, D, p, \
+        p_bub, if_tension, c_bub, \
+        c_bulk, R, rho_co2, v, r_arr = bubbleflow.numerical_eps_pless_fix_D( \
+                                        dt, t_nuc, p_s, R_nuc, L, p_in, v,
+                                        R_max, N, polyol_data_file, eos_co2_file,
+                                        dt_max=dt_max)
 
         # uses 2nd-order Taylor stencil
-        dcdr_num_list += [[(-3*c[i][0]+4*c[i][1]-c[i][2])/(r_arr[2]-r_arr[0]) for i in range(len(c))]]
-
+        dr = r_arr[1] - r_arr[0]
+        dcdr_num_list += [[fd.dydx_fwd_2nd(c[i][0], c[i][1], c[i][2], dr) \
+                            for i in range(len(c))]]
+        # saves list of times [s]
         t_num_list += [t_num]
 
     return t_eps, dcdr_eps, t_num_list, dcdr_num_list
