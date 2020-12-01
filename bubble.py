@@ -17,6 +17,7 @@ import geo
 import polyco2
 import flow
 import finitediff as fd
+from constants import * # includes constants
 
 # CONVERSIONS
 s_2_ms = 1000
@@ -37,7 +38,7 @@ def time_step(dt, t_prev, m_prev, p_prev, if_tension_prev, R_prev, rho_co2_prev,
     t_nuc, D, p_in, p_s, p_atm, v, L, c_bulk, c_s_interp_arrs, \
             if_interp_arrs, f_rho_co2, d_tolman, implicit = fixed_params
     t = t_prev + dt # increments time forward [s]
-    p = flow.calc_p(p_in, p_atm, v, t, L) # computes new pressure along observation capillary [Pa]
+    p = flow.calc_p(p_in, P_ATM, v, t, L) # computes new pressure along observation capillary [Pa]
     c_s = np.interp(p, *c_s_interp_arrs) # interpolates saturation concentration of CO2 [kg CO2 / m^3 polyol-CO2]
     # guess for self-consistently solving for radius and pressure of bubble
     R0 = (3/(4*np.pi)*m_prev/rho_co2_prev)**(1./3) #p[-1] + 2*if_tension[-1]/R0
@@ -471,7 +472,7 @@ def init(p_in, p_atm, p_s, t_nuc, R_nuc, v, L, D, polyol_data_file,
     f_rho_co2 = polyco2.interp_rho_co2(eos_co2_file)
 
     # initializes lists of key bubble properties
-    p = [flow.calc_p(p_in, p_atm, v, t_nuc, L)]
+    p = [flow.calc_p(p_in, P_ATM, v, t_nuc, L)]
     c_s = [np.interp(p[0], *c_s_interp_arrs)]
     R = [R_nuc]
     # solves for initial mass and pressure in bubble self-consistently
@@ -487,7 +488,7 @@ def init(p_in, p_atm, p_s, t_nuc, R_nuc, v, L, D, polyol_data_file,
     rho_co2 = [f_rho_co2(p_bub[0])]
 
     # calcultes the time at which pressure reaches saturation pressure
-    t_s = flow.calc_t_s(p_in, p_atm, p_s, v, L)
+    t_s = flow.calc_t_s(p_in, P_ATM, p_s, v, L)
     # ensures that nucleation time occurs after supersaturation achieved
     t_nuc = max(t_s, t_nuc)
     # initializes timeline [s]
@@ -496,7 +497,7 @@ def init(p_in, p_atm, p_s, t_nuc, R_nuc, v, L, D, polyol_data_file,
     t_f = L/v
 
     # collects fixed parameters
-    fixed_params = (t_nuc, D, p_in, p_s, p_atm, v, L, c_bulk, c_s_interp_arrs,
+    fixed_params = (t_nuc, D, p_in, p_s, P_ATM, v, L, c_bulk, c_s_interp_arrs,
                     if_interp_arrs, f_rho_co2, d_tolman, implicit)
 
     return t, m, D, p, p_bub, if_tension, c_s, c_bulk, R, rho_co2, t_f, \
@@ -616,7 +617,7 @@ def time_step_dcdr(dt, t_prev, m_prev, if_tension_prev, R_prev,
     D, p_in, p_s, v, L, c_s_interp_arrs, \
     if_interp_arrs, f_rho_co2, d_tolman = fixed_params
     t = t_prev + dt # increments time forward [s]
-    p = flow.calc_p(p_in, p_atm, v, t, L) # computes new pressure along observation capillary [Pa]
+    p = flow.calc_p(p_in, P_ATM, v, t, L) # computes new pressure along observation capillary [Pa]
     c_s = np.interp(p, *c_s_interp_arrs) # interpolates saturation concentration of CO2 [kg CO2 / m^3 polyol-CO2]
     # guess for self-consistently solving for radius and pressure of bubble
     R0 = (3/(4*np.pi)*m_prev/rho_co2_prev)**(1./3) #p[-1] + 2*if_tension[-1]/R0
@@ -670,7 +671,7 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, dt, p_s, R_nuc,
         t_nuc = (t_nuc_lo + t_nuc_hi)/2
         # computes bubble growth trajectory with new bubble nucleation time
         t, m, D, p, p_bub, if_tension, c_s, R, f_rho_co2 = \
-                growth_fn(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
+                growth_fn(dt, t_nuc, p_s, R_nuc, P_ATM, L, p_in, v,
                                  polyol_data_file, eos_co2_file)
         # finds index of timeline corresponding to measurement of bubble size
         i_bubble = next(i for i in range(len(t)) if t[i] >= t_bubble)
