@@ -26,6 +26,45 @@ cm2s_2_m2s = 1E-4
 
 
 
+def time_step(dt, t_prev, m_prev, p_prev, if_tension_prev, R_prev, rho_co2_prev,
+           fixed_params, drop_t_term):
+    """
+    Advances system forward by one time step.
+
+    Must come before grow() so it can be the default time_step_fn parameter.
+    """
+    t_nuc, D, p_in, p_s, p_atm, v, L, c_bulk, c_s_interp_arrs, \
+            if_interp_arrs, f_rho_co2, d_tolman, implicit = fixed_params
+    t = t_prev + dt # increments time forward [s]
+    p = flow.calc_p(p_in, p_atm, v, t, L) # computes new pressure along observation capillary [Pa]
+    c_s = np.interp(p, *c_s_interp_arrs) # interpolates saturation concentration of CO2 [kg CO2 / m^3 polyol-CO2]
+    # guess for self-consistently solving for radius and pressure of bubble
+    R0 = (3/(4*np.pi)*m_prev/rho_co2_prev)**(1./3) #p[-1] + 2*if_tension[-1]/R0
+    p_bub0 = p + 2*if_tension_prev/R0 #p_bub[-1]
+
+    # updates mass with explicit Euler method--inputs are i^th terms,
+    # so we pass in R[-1] since R has not been updated to R_{i+1} yet
+    m = m_prev + dt*calc_dmdt(D, p_s, p_prev, R_prev, t_prev, t_nuc, dt,
+                              c_s_interp_arrs, drop_t_term=drop_t_term)
+    # self-consistently solves for radius and pressure of bubble
+    R, p_bub = calc_R_p_bub(m, p, R0, p_bub0, if_interp_arrs,
+                                  f_rho_co2, d_tolman)
+
+    if implicit:
+        # uses explicit time-stepping result for initial guess of implicit
+        m0 = m
+        R0 = R
+        p_bub0 = p_bub
+        # self-consistently solves implicit Euler equation
+        soln = calc_m_R_p_bub(m0, R0, p_bub0, c_bulk, c_s, D, m_prev, p,
+                                 t-t_nuc, dt, if_interp_arrs, f_rho_co2, d_tolman)
+        m, R, p_bub = soln
+
+    if_tension = polyco2.calc_if_tension(p_bub, if_interp_arrs, R, d_tolman=d_tolman) # [N/m]]
+    rho_co2 = f_rho_co2(p_bub) # [kg/m^3]
+
+    return dt, t, m, p, p_bub, if_tension, c_s, R, rho_co2
+
 
 def grow(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
                      polyol_data_file, eos_co2_file, adaptive_dt=True,
@@ -552,44 +591,6 @@ def scf_bubble_impl(m, R, p_bub, c_bulk, c_s, D, m_prev,
     res = (res1, res2, res3)
 
     return res
-
-
-def time_step(dt, t_prev, m_prev, p_prev, if_tension_prev, R_prev, rho_co2_prev,
-           fixed_params, drop_t_term):
-    """
-    Advances system forward by one time step.
-    """
-    t_nuc, D, p_in, p_s, p_atm, v, L, c_bulk, c_s_interp_arrs, \
-            if_interp_arrs, f_rho_co2, d_tolman, implicit = fixed_params
-    t = t_prev + dt # increments time forward [s]
-    p = flow.calc_p(p_in, p_atm, v, t, L) # computes new pressure along observation capillary [Pa]
-    c_s = np.interp(p, *c_s_interp_arrs) # interpolates saturation concentration of CO2 [kg CO2 / m^3 polyol-CO2]
-    # guess for self-consistently solving for radius and pressure of bubble
-    R0 = (3/(4*np.pi)*m_prev/rho_co2_prev)**(1./3) #p[-1] + 2*if_tension[-1]/R0
-    p_bub0 = p + 2*if_tension_prev/R0 #p_bub[-1]
-
-    # updates mass with explicit Euler method--inputs are i^th terms,
-    # so we pass in R[-1] since R has not been updated to R_{i+1} yet
-    m = m_prev + dt*calc_dmdt(D, p_s, p_prev, R_prev, t_prev, t_nuc, dt,
-                              c_s_interp_arrs, drop_t_term=drop_t_term)
-    # self-consistently solves for radius and pressure of bubble
-    R, p_bub = calc_R_p_bub(m, p, R0, p_bub0, if_interp_arrs,
-                                  f_rho_co2, d_tolman)
-
-    if implicit:
-        # uses explicit time-stepping result for initial guess of implicit
-        m0 = m
-        R0 = R
-        p_bub0 = p_bub
-        # self-consistently solves implicit Euler equation
-        soln = calc_m_R_p_bub(m0, R0, p_bub0, c_bulk, c_s, D, m_prev, p,
-                                 t-t_nuc, dt, if_interp_arrs, f_rho_co2, d_tolman)
-        m, R, p_bub = soln
-
-    if_tension = polyco2.calc_if_tension(p_bub, if_interp_arrs, R, d_tolman=d_tolman) # [N/m]]
-    rho_co2 = f_rho_co2(p_bub) # [kg/m^3]
-
-    return dt, t, m, p, p_bub, if_tension, c_s, R, rho_co2
 
 
 def time_step_dcdr_fix_D(dt, t_prev, m_prev, if_tension_prev, R_prev,
