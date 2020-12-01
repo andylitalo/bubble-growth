@@ -160,7 +160,7 @@ def grow(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
     return t, m, D, p, p_bub, if_tension, c_s, c_bulk, R, rho_co2
 
 
-def adaptive_time_step(dt, time_step_params, time_step_fn, tol_R, alpha):
+def adaptive_time_step(dt, time_step_params, time_step_fn, tol_R, alpha, dt_max=None):
     """
     """
     while True:
@@ -172,8 +172,10 @@ def adaptive_time_step(dt, time_step_params, time_step_fn, tol_R, alpha):
         R_b = props_b[-2]
         # checks if the discrepancy in the radius is below tolerance
         if np.abs( (R_a - R_b) / R_a) <= tol_R:
-            # increases time step for next calculation
-            dt *= (1 + alpha)
+            # only increases time step if it will remain below maximum
+            if (dt_max is None) or (dt*(1+alpha) < dt_max):
+                # increases time step for next calculation
+                dt *= (1 + alpha)
             # takes properties calculated with smaller time step
             props = props_a
             # breaks loop now that time step met tolerance
@@ -184,6 +186,14 @@ def adaptive_time_step(dt, time_step_params, time_step_fn, tol_R, alpha):
 
     return dt, props
 
+
+def calc_dcdr_eps(c_bulk, c_s, R, D, t):
+    """
+    Calculates the concentration gradient at the surface of the bubble for the
+    Epstein-Plesset model.
+    """
+    return  (c_bulk - np.asarray(c_s))*(1/np.asarray(R) + \
+                1/np.sqrt(np.pi*D*(np.asarray(t))))
 
 def calc_dmdt(D, p_s, p, R, t, t_nuc, dt, c_s_interp_arrs, tol=1E-9,
                 drop_t_term=False):

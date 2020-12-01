@@ -119,9 +119,9 @@ def bc_bub_cap(c_bub, c_max=0):
 def numerical_eps_pless_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
                      polyol_data_file, eos_co2_file, adaptive_dt=True,
                      if_tension_model='lin', implicit=False, d_tolman=0,
-                     tol_R=0.001, alpha=0.3, D=-1,
+                     tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
                      R_min=0, dcdt_fn=diffn.calc_dcdt_sph_fix_D,
-                        time_step_fn=bubble.time_step_dcdr_fix_D):
+                     time_step_fn=bubble.time_step_dcdr_fix_D):
     """
     Performs numerical computation of Epstein-Plesset model for comparison.
     Once confirmed to provide accurate estimation of Epstein-Plesset result,
@@ -153,7 +153,8 @@ def numerical_eps_pless_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
         # BUBBLE GROWTH
         if adaptive_dt:
             dt, props_bub = bubble.adaptive_time_step(dt, time_step_params,
-                                                    time_step_fn, tol_R, alpha)
+                                                    time_step_fn, tol_R, alpha,
+                                                    dt_max=dt_max)
         else:
             # calculates properties after one time step
             props_bub = time_step_fn(dt, *time_step_params)

@@ -22,6 +22,40 @@ m_2_nm = 1E9
 ########################### FUNCTION DEFINITIONS ##############################
 
 
+
+def compare_dcdr(N_list, dt, t_nuc, p_s, R_nuc, p_atm, L,
+                                   p_in, v, polyol_data_file, eos_co2_file):
+    """
+    Compares concentration gradient at interface of bubble b/w Epstein-Plesset
+    model and numerical model.
+    """
+    # initializes list of numerically computed concentration gradients
+    dcdr_num_list = []
+    # initializes list of times [s]
+    t_num_list = []
+
+    # first performs Epstein-Plesset computation as benchmark
+    t_eps, m, D, p, p_bub, if_tension,\
+    c_s, c_bulk, R, rho_co2 = bubble.grow(dt, t_nuc, p_s, R_nuc, p_atm, L,
+                                        p_in, v, polyol_data_file, eos_co2_file)
+    # computes concentration gradient at bubble interface
+    dcdr_eps = bubble.calc_dcdr_eps(c_bulk, c_s, R, D, np.asarray(t_eps) - t_nuc)
+
+    # then performs numerical computation for different grid spacings
+    for N in N_list:
+        # performs simulation
+        t_flow, c, t_num, m, D, p, p_bub, if_tension, \
+        c_bub, c_bulk, R, rho_co2, v, r_arr = bubbleflow.numerical_eps_pless_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
+                                                 polyol_data_file, eos_co2_file)
+
+        # uses 2nd-order Taylor stencil
+        dcdr_num_list += [[(-3*c[i][0]+4*c[i][1]-c[i][2])/(r_arr[2]-r_arr[0]) for i in range(len(c))]]
+
+        t_num_list += [t_num]
+
+    return t_eps, dcdr_eps, t_num_list, dcdr_num_list
+
+
 def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
                      i_t_nuc, sigma_R=0.01, ax=None, max_iter=12):
     """

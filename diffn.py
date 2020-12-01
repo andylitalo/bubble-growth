@@ -23,8 +23,6 @@ import flow
 from conversions import *
 
 
-
-
 ############################# FUNCTION DEFINITIONS #############################
 
 
@@ -163,10 +161,10 @@ def calc_dcdt_sph_fix_D(xi_arr, c_arr, fixed_params):
     # and their corresponding radii
     r_arr_c = r_arr[1:-1]
     # and their corresponding grid spacings
-    dr_arr = r_arr[2:] - r_arr[1:-1]
+    dr_arr = (r_arr[2:] - r_arr[:-2]) / 2
 
     # FIRST TERM: 2/r * D(c) * dc/dr
-    # computes spatial derivative of concentration dc/dr with leapfrog method
+    # computes spatial derivative of concentration dc/dr with central difference
     dcdr_arr = (c_arr[2:] - c_arr[:-2]) / (2*dr_arr)
     term1 = 2/r_arr_c * D * dcdr_arr
 
@@ -180,6 +178,62 @@ def calc_dcdt_sph_fix_D(xi_arr, c_arr, fixed_params):
 
     return dcdt
 
+#
+# def calc_dcdt_sph_fix_D_log(xi_arr, c_arr, fixed_params):
+#     """
+#     Computes the time derivative of concentration dc/dt in spherical
+#     coordinates assuming concentration dependent diffusivity constant.
+#
+#     Rewrites derivatives in terms of log(xi) assuming log-spaced grid.
+#
+#     In spherical coordinates Fick's law of dc/dt = div(D(c)grad(c)) becomes:
+#
+#             dc/dt = 2/r*D(c)*dc/dr + dD/dc*(dc/dr)^2 + D(c)*d2c/dr2
+#
+#     assuming spherical symmetry.
+#
+#     Parameters
+#     ----------
+#     xi_arr : numpy array of N+1 floats
+#         radial coordinates of points in mesh measured from radius of bubble [m]
+#     c_arr : numpy array of N+1 floats
+#         concentrations of CO2 at each of the points in r_arr
+#         [kg CO2 / m^3 polyol-co2]
+#     fixed_params: list
+#         D : float
+#             diffusivity of CO2 in polyol (fixed) [m^2/s]
+#         R : float
+#             radius of bubble [m]
+#
+#     Returns
+#     -------
+#     dcdt : numpy array of N-1 floats
+#         time derivatives of concentration at each of the interior mesh points
+#         (the concentrations at the end points at i=0 and i=N+1 are computed by
+#         the boundary conditions)
+#     """
+#     # extracts fixed parameters
+#     D, R = fixed_params
+#     r_arr = xi_arr + R
+#     # and their corresponding radii
+#     r_arr_c = r_arr[1:-1]
+#     # and their corresponding grid spacings
+#     dr_arr = (r_arr[2:] - r_arr[:-2]) / 2
+#
+#     # FIRST TERM: 2/r * D(c) * dc/dr
+#     # computes spatial derivative of concentration dc/dr with leapfrog method
+#     dcdr_arr = (c_arr[2:] - c_arr[:-2]) / (2*dr_arr)
+#     term1 = 2/r_arr_c * D * dcdr_arr
+#
+#     # SECOND TERM: D(c) * d2c/dr2
+#     # computes second spatial derivative of concentration with central
+#     # difference formula
+#     d2cdr2_arr = (c_arr[2:] - 2*c_arr[1:-1] + c_arr[:-2]) / (dr_arr**2)
+#     term2 = D * d2cdr2_arr
+#
+#     dcdt = term1 + term2
+#
+#     return dcdt
 
 
 def calc_dcdt_sph_fix_D_transf(xi_arr, c_arr, fixed_params):
@@ -353,7 +407,8 @@ def neumann(c, i, j, dcdr, r_arr):
     c[i] = dcdr * (r_arr[i] - r_arr[j]) + c[j]
 
 
-def time_step(dt, t_prev, r_arr, c_prev, dcdt_fn, bc_specs_list, fixed_params):
+def time_step(dt, t_prev, r_arr, c_prev, dcdt_fn, bc_specs_list, fixed_params,
+                apply_bc_first=True):
     """
     Advances system forward by one time step.
 
@@ -391,15 +446,22 @@ def time_step(dt, t_prev, r_arr, c_prev, dcdt_fn, bc_specs_list, fixed_params):
     c_curr : list of N+1 floats
         current concentration profile at grid points [kg CO2 / m^3 polyol-CO2]
     """
+
+    # applies boundary conditions
+    if apply_bc_first:
+        for bc_specs in bc_specs_list:
+            apply_bc(c_prev, bc_specs)
+
+
     # increments time forward [s]
     t_curr = t_prev + dt
     # no adaptive time-stepping
     dt_curr = dt
     # extracts array of relevant concentrations
-    c_prev_arr = np.array(c_prev[1:-1])
+    c_prev_arr = np.asarray(c_prev)
 
     # updates concentration with explicit Euler method
-    c_curr_arr = c_prev_arr + dt*dcdt_fn(r_arr, np.array(c_prev), fixed_params)
+    c_curr_arr = c_prev_arr[1:-1] + dt*dcdt_fn(r_arr, c_prev_arr, fixed_params)
     # adds end points for the application of the boundary conditions
     c_curr = [0] + list(c_curr_arr) + [0]
 
