@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import geo
 import polyco2
 import flow
+import finitediff as fd
 
 # CONVERSIONS
 s_2_ms = 1000
@@ -275,7 +276,8 @@ def calc_dmdt_dcdr_fix_D(r_arr, c, R, D):
         Time-derivative of the mass enclosed in the bubble [kg/s]
     """
     # concentration gradient at interface of bubble [kg/m^3 / m]
-    dcdr = (c[1] - c[0]) / (r_arr[1] - r_arr[0])
+    # 2nd-order Taylor scheme
+    dcdr = fd.dydx_fwd_2nd(c[0], c[1], c[2], r_arr[1]-r_arr[0])
     dmdt = (4*np.pi*R**2*D)*dcdr
 
     return dmdt

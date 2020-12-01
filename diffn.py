@@ -80,8 +80,9 @@ def calc_dcdt_cyl(r_arr, c_arr, fixed_params):
         dc : float
             step size of concentration used to estimate dD/dc by forward
             difference formula [kg CO2 / m^3 polyol-CO2]
-        polyol_data_file : string
-            name of file containing polyol data [.csv]
+        interp_arrs : tuple of numpy arrays
+            arrays for interpolations in polyco2.calc_D_of_c_raw():
+            c_s_arr, p_s_arr, p_arr, D_exp_arr, D_sqrt_arr
 
     Returns
     -------
@@ -178,62 +179,73 @@ def calc_dcdt_sph_fix_D(xi_arr, c_arr, fixed_params):
 
     return dcdt
 
-#
-# def calc_dcdt_sph_fix_D_log(xi_arr, c_arr, fixed_params):
-#     """
-#     Computes the time derivative of concentration dc/dt in spherical
-#     coordinates assuming concentration dependent diffusivity constant.
-#
-#     Rewrites derivatives in terms of log(xi) assuming log-spaced grid.
-#
-#     In spherical coordinates Fick's law of dc/dt = div(D(c)grad(c)) becomes:
-#
-#             dc/dt = 2/r*D(c)*dc/dr + dD/dc*(dc/dr)^2 + D(c)*d2c/dr2
-#
-#     assuming spherical symmetry.
-#
-#     Parameters
-#     ----------
-#     xi_arr : numpy array of N+1 floats
-#         radial coordinates of points in mesh measured from radius of bubble [m]
-#     c_arr : numpy array of N+1 floats
-#         concentrations of CO2 at each of the points in r_arr
-#         [kg CO2 / m^3 polyol-co2]
-#     fixed_params: list
-#         D : float
-#             diffusivity of CO2 in polyol (fixed) [m^2/s]
-#         R : float
-#             radius of bubble [m]
-#
-#     Returns
-#     -------
-#     dcdt : numpy array of N-1 floats
-#         time derivatives of concentration at each of the interior mesh points
-#         (the concentrations at the end points at i=0 and i=N+1 are computed by
-#         the boundary conditions)
-#     """
-#     # extracts fixed parameters
-#     D, R = fixed_params
-#     r_arr = xi_arr + R
-#     # and their corresponding radii
-#     r_arr_c = r_arr[1:-1]
-#     # and their corresponding grid spacings
-#     dr_arr = (r_arr[2:] - r_arr[:-2]) / 2
-#
-#     # FIRST TERM: 2/r * D(c) * dc/dr
-#     # computes spatial derivative of concentration dc/dr with leapfrog method
-#     dcdr_arr = (c_arr[2:] - c_arr[:-2]) / (2*dr_arr)
-#     term1 = 2/r_arr_c * D * dcdr_arr
-#
-#     # SECOND TERM: D(c) * d2c/dr2
-#     # computes second spatial derivative of concentration with central
-#     # difference formula
-#     d2cdr2_arr = (c_arr[2:] - 2*c_arr[1:-1] + c_arr[:-2]) / (dr_arr**2)
-#     term2 = D * d2cdr2_arr
-#
-#     dcdt = term1 + term2
-#
-#     return dcdt
+
+def calc_dcdt_sph_vary_D(xi_arr, c_arr, fixed_params):
+    """
+    Computes the time derivative of concentration dc/dt in spherical
+    coordinates assuming concentration-dependent diffusivity.
+
+    In spherical coordinates Fick's law of dc/dt = div(D(c)grad(c)) becomes:
+
+            dc/dt = 2/r*D(c)*dc/dr + dD/dc*(dc/dr)^2 + D(c)*d2c/dr2
+
+    assuming spherical symmetry.
+
+    Parameters
+    ----------
+    xi_arr : numpy array of N+1 floats
+        radial coordinates of points in mesh measured from radius of bubble [m]
+    c_arr : numpy array of N+1 floats
+        concentrations of CO2 at each of the points in r_arr
+        [kg CO2 / m^3 polyol-co2]
+    fixed_params: list
+        R : float
+            radius of bubble [m]
+        dc : float
+            step size in concentration dimension [kg/m^3]
+        interp_arrs : tuple of numpy arrays
+            numpy arrays for interpolation
+
+    Returns
+    -------
+    dcdt : numpy array of N-1 floats
+        time derivatives of concentration at each of the interior mesh points
+        (the concentrations at the end points at i=0 and i=N+1 are computed by
+        the boundary conditions)
+    """
+    # extracts fixed parameters
+    R, dc, interp_arrs = fixed_params
+    r_arr = xi_arr + R
+    # and their corresponding radii
+    r_arr_c = r_arr[1:-1]
+    # and their corresponding grid spacings
+    dr_arr = (r_arr[2:] - r_arr[:-2]) / 2
+    # and the corresponding concentrations
+    c_arr_c = c_arr[1:-1]
+    # computes diffusivity constant at each point on grid [m^2/s]
+    D_arr_c = np.asarray([polyco2.calc_D_of_c_raw(c, *interp_arrs) \
+                                                    for c in c_arr_c])
+
+    # FIRST TERM: 2/r * D(c) * dc/dr
+    # computes spatial derivative of concentration dc/dr with central difference
+    dcdr_arr = (c_arr[2:] - c_arr[:-2]) / (2*dr_arr)
+    term1 = 2/r_arr_c * D_arr_c * dcdr_arr
+
+    # SECOND TERM: dD/dc * (dc/dr)^2
+    # computes dD/dc [m^2/s / kg/m^3]
+    dDdc_arr_c = np.asarray([polyco2.calc_dDdc_raw(c, dc, *interp_arrs) \
+                                                    for c in c_arr_c])
+    term2 = dDdc_arr * (dcdr_arr)**2
+
+    # THIRD TERM: D(c) * d2c/dr2
+    # computes second spatial derivative of concentration with central
+    # difference formula
+    d2cdr2_arr = (c_arr[2:] - 2*c_arr[1:-1] + c_arr[:-2]) / (dr_arr**2)
+    term3 = D * d2cdr2_arr
+
+    dcdt = term1 + term2 + term3
+
+    return dcdt
 
 
 def calc_dcdt_sph_fix_D_transf(xi_arr, c_arr, fixed_params):
@@ -344,7 +356,7 @@ def go(dt, t_f, R_min, R_o, N, c_0, dcdt_fn, bc_specs_list,
 
 
 def init(R_min, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s, dc_c_s_frac,
-                        polyol_data_file):
+                        polyol_data_file, t_i=0):
     """
     Initializes parameters for go().
 
@@ -364,7 +376,7 @@ def init(R_min, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s, dc_c_s_frac,
     t_f = d/v
 
     # initializes system
-    t = [0]
+    t = [t_i]
     c = [c_0]
 
     # loads arrays for interpolation
@@ -451,7 +463,6 @@ def time_step(dt, t_prev, r_arr, c_prev, dcdt_fn, bc_specs_list, fixed_params,
     if apply_bc_first:
         for bc_specs in bc_specs_list:
             apply_bc(c_prev, bc_specs)
-
 
     # increments time forward [s]
     t_curr = t_prev + dt

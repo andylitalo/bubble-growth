@@ -29,7 +29,7 @@ m_2_nm = 1E9
 
 
 def compare_dcdr(N_list, dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v, R_max,
-                    polyol_data_file, eos_co2_file, dt_max=None):
+                    polyol_data_file, eos_co2_file, dt_max_list=None):
     """
     Compares concentration gradient at interface of bubble b/w Epstein-Plesset
     model and numerical model.
@@ -47,7 +47,11 @@ def compare_dcdr(N_list, dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v, R_max,
     dcdr_eps = bubble.calc_dcdr_eps(c_bulk, c_s, R, D, np.asarray(t_eps) - t_nuc)
 
     # then performs numerical computation for different grid spacings
-    for N in N_list:
+    for i, N in enumerate(N_list):
+        if dt_max_list is not None:
+            dt_max = dt_max_list[i]
+        else:
+            dt_max = None
         # performs simulation
         t_flow, c, t_num, m, D, p, \
         p_bub, if_tension, c_bub, \

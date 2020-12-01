@@ -126,7 +126,7 @@ def numerical_eps_pless_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
     Performs numerical computation of Epstein-Plesset model for comparison.
     Once confirmed to provide accurate estimation of Epstein-Plesset result,
     this will be modified to include the effects of a concentration-dependent
-    diffusivity.
+    diffusivity in numerical_eps_pless_vary_D().
     """
     # INITIALIZES BUBBLE PARAMETERS
     t_bub, m, D, p, p_bub, if_tension, c_bub, \
@@ -140,8 +140,6 @@ def numerical_eps_pless_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
     t_flow = [t_nuc]
     r_arr = np.linspace(R_min, R_max, N+1)
     c = [c_bulk*np.ones(N+1)]
-    # only fixed parameter for fixed diffusivity is the diffusivity [m^2/s]
-    fixed_params_flow = (D)
 
     # final time of model [s]
     t_f = L/v
@@ -170,9 +168,66 @@ def numerical_eps_pless_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
         # interface
         fixed_params_flow = (D, R[-1])
         props_flow = diffn.time_step(dt, t_flow[-1], r_arr, c[-1], dcdt_fn,
-                            bc_bub_cap(c_bub[-1], c_max=c_bulk), fixed_params_flow)
+                        bc_bub_cap(c_bub[-1], c_max=c_bulk), fixed_params_flow)
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t_flow, c)
 
     return t_flow, c, t_bub, m, D, p, p_bub, if_tension, c_bub, c_bulk, R, \
+                rho_co2, v, r_arr
+
+
+def numerical_eps_pless_vary_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
+                     polyol_data_file, eos_co2_file, dc, adaptive_dt=True,
+                     if_tension_model='lin', implicit=False, d_tolman=0,
+                     tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
+                     R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
+                     time_step_fn=bubble.time_step_dcdr_vary_D):
+    """
+    Peforms numerical computation of diffusion into bubble from bulk accounting
+    for effect of concentration of CO2 on the local diffusivity D.
+    """
+    # INITIALIZES PARAMETERS FOR DIFFUSION IN BULK
+    t_flow, c, r_arr, dp, R_i, \
+    v, _, _, t_f, fixed_params = diffn.init(R_min, R_max, N, eta_i, eta_o, d,
+                                                L, Q_i, Q_o, p_s, dc_c_s_frac,
+                                                polyol_data_file, t_i=t_nuc)
+    dc, interp_arrs = fixed_params
+    p_in = P_ATM - dp
+    # INITIALIZES BUBBLE PARAMETERS
+    t_bub, m, D, p, p_bub, if_tension, c_bub, \
+    c_bulk, R, rho_co2, _, fixed_params_bub = bubble.init(p_in, P_ATM, p_s, t_nuc,
+                                            R_nuc, v, L, -1, polyol_data_file,
+                                            eos_co2_file, if_tension_model,
+                                            d_tolman, implicit)
+
+    # TIME-STEPPING -- BUBBLE NUCLEATES AND GROWS
+    while t_bub[-1] <= t_f:
+        # collects parameters for time-stepping method
+        time_step_params = (t_bub[-1], m[-1], if_tension[-1], R[-1],
+                                rho_co2[-1], r_arr, c[-1], fixed_params_bub)
+        # BUBBLE GROWTH
+        if adaptive_dt:
+            dt, props_bub = bubble.adaptive_time_step(dt, time_step_params,
+                                                    time_step_fn, tol_R, alpha,
+                                                    dt_max=dt_max)
+        else:
+            # calculates properties after one time step
+            props_bub = time_step_fn(dt, *time_step_params)
+
+        # updates properties of bubble at new time step
+        bubble.update_props(props_bub, t_bub, m, p, p_bub, if_tension, c_bub, R,
+                            rho_co2)
+
+        # SHEATH FLOW
+        # calculates properties after one time step with updated
+        # boundary conditions
+        # adds bubble radius R to grid of radii since r_arr starts at bubble
+        # interface
+        fixed_params_flow = (R[-1], dc, interp_arrs)
+        props_flow = diffn.time_step(dt, t_flow[-1], r_arr, c[-1], dcdt_fn,
+                        bc_bub_cap(c_bub[-1], c_max=c_bulk), fixed_params_flow)
+        # stores properties at new time step in lists
+        diffn.update_props(props_flow, t_flow, c)
+
+        return t_flow, c, t_bub, m, D, p, p_bub, if_tension, c_bub, c_bulk, R, \
                 rho_co2, v, r_arr
