@@ -214,7 +214,7 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, fixed_params):
         the boundary conditions)
     """
     # extracts fixed parameters
-    R, dc, interp_arrs = fixed_params
+    R, dc, D_params, D_fn = fixed_params
     r_arr = xi_arr + R
     # and their corresponding radii
     r_arr_c = r_arr[1:-1]
@@ -223,17 +223,16 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, fixed_params):
     # and the corresponding concentrations
     c_arr_c = c_arr[1:-1]
     # computes diffusivity constant at each point on grid [m^2/s]
-    D_arr_c = np.asarray([polyco2.calc_D_of_c_raw(c, *interp_arrs) \
-                                                    for c in c_arr_c])
+    D_arr = np.asarray([D_fn(c, D_params) for c in c_arr_c])
 
     # FIRST TERM: 2/r * D(c) * dc/dr
     # computes spatial derivative of concentration dc/dr with central difference
     dcdr_arr = (c_arr[2:] - c_arr[:-2]) / (2*dr_arr)
-    term1 = 2/r_arr_c * D_arr_c * dcdr_arr
+    term1 = 2/r_arr_c * D_arr * dcdr_arr
 
     # SECOND TERM: dD/dc * (dc/dr)^2
     # computes dD/dc [m^2/s / kg/m^3]
-    dDdc_arr_c = np.asarray([polyco2.calc_dDdc_raw(c, dc, *interp_arrs) \
+    dDdc_arr = np.asarray([polyco2.calc_dDdc_fn(c, dc, D_params, D_fn) \
                                                     for c in c_arr_c])
     term2 = dDdc_arr * (dcdr_arr)**2
 
@@ -241,7 +240,7 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, fixed_params):
     # computes second spatial derivative of concentration with central
     # difference formula
     d2cdr2_arr = (c_arr[2:] - 2*c_arr[1:-1] + c_arr[:-2]) / (dr_arr**2)
-    term3 = D * d2cdr2_arr
+    term3 = D_arr * d2cdr2_arr
 
     dcdt = term1 + term2 + term3
 
@@ -339,7 +338,7 @@ def go(dt, t_f, R_min, R_o, N, c_0, dcdt_fn, bc_specs_list,
         concentration profiles over time [kg CO2 / m^3 polyol-CO2], M time
         steps and N points in space
     """
-    t, c, r_arr, R_i, v, \
+    t, c, r_arr, \
     c_0, c_s, t_f, fixed_params = init(R_min, R_o, N, eta_i, eta_o, d, L, Q_i,
                                         Q_o, p_s, dc_c_s_frac, polyol_data_file)
     # applies Euler's method to estimate bubble growth over time
@@ -355,18 +354,29 @@ def go(dt, t_f, R_min, R_o, N, c_0, dcdt_fn, bc_specs_list,
     return t, c
 
 
+
 def init(R_min, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s, dc_c_s_frac,
                         polyol_data_file, t_i=0):
+    """
+    Full initialization function for go().
+    """
+    # computes inner stream radius [m] and velocity [m/s]
+    _, R_i, v = flow.get_dp_R_i_v_max(eta_i, eta_o, L, Q_i*uLmin_2_m3s,
+                                        Q_o*uLmin_2_m3s, R_o, SI=True)
+    t, c, r_arr, c_0, c_s, t_f, fixed_params = init_sub(R_min, R_i, R_o, N, d,
+                                                        v, p_s, dc_c_s_frac,
+                                                        polyol_data_file)
+
+    return t, c, r_arr, c_0, c_s, t_f, fixed_params
+
+
+def init_sub(R_min, R_i, R_o, N, d, v, p_s, dc_c_s_frac, polyol_data_file, t_i=0):
     """
     Initializes parameters for go().
 
     """
     # creates grid of radii from bubble radius to inner wall of capillary [m]
     r_arr = np.linspace(R_min, R_o, N+1)
-
-    # computes inner stream radius [m] and velocity [m/s]
-    dp, R_i, v = flow.get_dp_R_i_v_max(eta_i, eta_o, L, Q_i*uLmin_2_m3s,
-                                        Q_o*uLmin_2_m3s, R_o, SI=True)
 
     # creates initial concentration profile [kg CO2 / m^3 polyol-CO2]
     c_0 = np.zeros([N+1])
@@ -386,7 +396,7 @@ def init(R_min, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s, dc_c_s_frac,
     # stores fixed parameters
     fixed_params = (dc, interp_arrs)
 
-    return t, c, r_arr, dp, R_i, v, c_0, c_s, t_f, fixed_params
+    return t, c, r_arr, c_0, c_s, t_f, fixed_params
 
 
 def neumann(c, i, j, dcdr, r_arr):
