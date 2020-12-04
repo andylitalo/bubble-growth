@@ -97,13 +97,6 @@ def grow(dt_sheath, dt, dcdt_fn, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s,
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t, c)
 
-        # updates bulk concentration used in bubble model
-        # i_R = np.argmin(np.abs(r_arr - R[-1]))
-        # c_R = c[-1][i_R]
-        # fixed_params_bub = list(fixed_params_bub)
-        # fixed_params_bub[i_c_bulk] = c_R
-        # print(c_R)
-
     return t, c, t_bub, m, D, p, p_bub, if_tension, c_bub, c_s, R, rho_co2, R_i, v
 
 
@@ -239,8 +232,8 @@ def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
     while t_bub[-1] <= t_f:
         # collects parameters for time-stepping method
         D += [D_fn(c_bub[-1], D_params)]
-        fixed_params_bub = (D[-1], p_in, p_s, v, L, c_s_interp_arrs, if_interp_arrs,
-                            f_rho_co2, d_tolman)
+        fixed_params_bub = (D[-1], p_in, p_s, v, L, c_s_interp_arrs,
+                                if_interp_arrs, f_rho_co2, d_tolman)
         time_step_params = (t_bub[-1], m[-1], if_tension[-1], R[-1],
                                 rho_co2[-1], r_arr, c[-1], fixed_params_bub)
         # BUBBLE GROWTH
@@ -259,8 +252,8 @@ def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
         # SHEATH FLOW
         # first considers coarsening the grid by half if resolution of
         # concentration gradient is sufficient
+        dr = r_arr[1] - r_arr[0]
         if half_grid:
-            dr = r_arr[1] - r_arr[0]
             dcdr = c[-1][1] / dr # assumes c(r=0) = 0
             if 2*dr < c_bulk / (pts_per_grad * dcdr):
                 r_arr = halve_grid(r_arr)
@@ -271,7 +264,8 @@ def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
                 if dt_max is not None:
                     dt_max *= 4
 
-            dr_list += [dr]
+        # stores grid spacing
+        dr_list += [dr]
 
         # calculates properties after one time step with updated
         # boundary conditions

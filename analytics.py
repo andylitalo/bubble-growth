@@ -28,20 +28,20 @@ m_2_nm = 1E9
 
 
 
-def calc_dcdr_diff(t, dcdr, t_c, dcdr_c):
+def calc_dcdr_diff(t_ref, dcdr_ref, t, dcdr):
     """
     Calculates the difference in the concentration gradient dc/dr at the
     surface of the bubble, interpolating to have matching time points.
     """
-    dcdr_c_arr = np.interp(t, t_c, dcdr_c)
-    dcdr_arr = np.asarray(dcdr)
-    dcdr_diff = np.abs(dcdr_c_arr - dcdr_arr) / dcdr_arr
+    dcdr_arr = np.interp(t_ref, t, dcdr)
+    dcdr_ref_arr = np.asarray(dcdr_ref)
+    dcdr_diff = np.abs(dcdr_arr - dcdr_ref_arr) / dcdr_ref_arr
 
     return dcdr_diff
 
 
 def compare_dcdr(num_input_list, num_fn_list, t_ref, dcdr_ref,
-                    i_c=1, i_dr=-1):
+                    i_c=1, i_t_num=2, i_dr=-1):
     """
     Compares concentration gradient dc/dr at the surface of the bubble for
     different numerical outputs against the reference.
@@ -49,13 +49,18 @@ def compare_dcdr(num_input_list, num_fn_list, t_ref, dcdr_ref,
     """
     # initializes list of fractional differences in dc/dr from reference
     dcdr_diff_list = []
+
     # computes dc/dr for numerical functions
-    for input, fn in (num_input_list, num_fn_list):
+    for input, fn in zip(num_input_list, num_fn_list):
+        print('Computing {0:s}'.format(str(fn)))
         output = fn(*input)
         c = output[i_c]
+        t_num = output[i_t_num]
         dr_list = output[i_dr]
+
         # uses 2nd-order Taylor stencil to compute dc/dr at r = 0
-        dcdr_num = fd.dydx_fwd_2nd(c[0], c[1], c[2], dr_list[0])
+        dcdr_num = [fd.dydx_fwd_2nd(c[i][0], c[i][1], c[i][2], dr_list[i]) for \
+                            i in range(len(c))]
         # computes fractional difference from dc/dr with E-P model
         dcdr_diff_list += [calc_dcdr_diff(t_ref, dcdr_ref, t_num, dcdr_num)]
 
