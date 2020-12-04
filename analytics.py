@@ -84,7 +84,7 @@ def compare_dcdr_eps(num_input_list, num_fn_list, eps_input):
     return t_eps, dcdr_diff_list
 
 
-def calc_dcdr_ep_fix_D(N_list, dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v, R_max,
+def calc_dcdr_eps_fix_D(N_list, dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max,
                     polyol_data_file, eos_co2_file, dt_max_list=None):
     """
     Calculates concentration gradient at interface of bubble b/w Epstein-Plesset
@@ -97,7 +97,7 @@ def calc_dcdr_ep_fix_D(N_list, dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v, R_max,
 
     # first performs Epstein-Plesset computation as benchmark
     t_eps, m, D, p, p_bub, if_tension,\
-    c_s, c_bulk, R, rho_co2 = bubble.grow(dt, t_nuc, p_s, R_nuc, p_atm, L,
+    c_s, c_bulk, R, rho_co2 = bubble.grow(dt, t_nuc, p_s, R_nuc, L,
                                         p_in, v, polyol_data_file, eos_co2_file)
     # computes concentration gradient at bubble interface
     dcdr_eps = bubble.calc_dcdr_eps(c_bulk, c_s, R, D, np.asarray(t_eps) - t_nuc)
@@ -210,7 +210,7 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
     return t_nuc, results
 
 
-def time_step_convergence(growth_model, dt_list, t_nuc, p_s, R_nuc, p_atm, L,
+def time_step_convergence(growth_model, dt_list, t_nuc, p_s, R_nuc, L,
                           p_in, v, polyol_data_file, eos_co2_file, adaptive_dt,
                           implicit):
     """
@@ -237,7 +237,7 @@ def time_step_convergence(growth_model, dt_list, t_nuc, p_s, R_nuc, p_atm, L,
 
     # solves bubble growth for different time steps
     for dt in dt_list:
-        results = growth_model(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
+        results = growth_model(dt, t_nuc, p_s, R_nuc, L, p_in, v,
                                polyol_data_file, eos_co2_file,
                                adaptive_dt=adaptive_dt, implicit=implicit)
         t, m, D, p, p_bubble, if_tension, c_s, R, rho_co2 = results
@@ -258,7 +258,7 @@ def time_step_convergence(growth_model, dt_list, t_nuc, p_s, R_nuc, p_atm, L,
     return result
 
 
-def tol_R_convergence(growth_model, tol_R_list, t_nuc, p_s, R_nuc, p_atm, L,
+def tol_R_convergence(growth_model, tol_R_list, t_nuc, p_s, R_nuc, L,
                           p_in, v, polyol_data_file, eos_co2_file, implicit,
                           alpha=1.3, dt0=1E-6):
     """
@@ -286,7 +286,7 @@ def tol_R_convergence(growth_model, tol_R_list, t_nuc, p_s, R_nuc, p_atm, L,
 
     # solves bubble growth for different time steps
     for tol_R in tol_R_list:
-        results = growth_model(dt0, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
+        results = growth_model(dt0, t_nuc, p_s, R_nuc, L, p_in, v,
                                polyol_data_file, eos_co2_file, adaptive_dt=True,
                                implicit=implicit, tol_R=tol_R, alpha=alpha)
         t, m, D, p, p_bubble, if_tension, c_s, R, rho_co2 = results
@@ -372,10 +372,10 @@ def d_tolman(d_tolman, args):
     """
     Wrapper for growth function with varied Tolman length.
     """
-    dt0, t_nuc, p_s, R_nuc, p_atm, L, p_in, v, \
+    dt0, t_nuc, p_s, R_nuc, L, p_in, v, \
     polyol_data_file, eos_co2_file, adaptive_dt, \
     implicit, tol_R, alpha = args
-    return bubble.grow(dt0, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
+    return bubble.grow(dt0, t_nuc, p_s, R_nuc, L, p_in, v,
                        polyol_data_file, eos_co2_file, adaptive_dt=True,
                        implicit=implicit, tol_R=tol_R, alpha=alpha,
                        d_tolman=d_tolman)
@@ -386,10 +386,10 @@ def diffusivity(D, args):
     """
     Wrapper for growth function with varied Tolman length.
     """
-    dt0, t_nuc, p_s, R_nuc, p_atm, L, p_in, v, \
+    dt0, t_nuc, p_s, R_nuc, L, p_in, v, \
     polyol_data_file, eos_co2_file, adaptive_dt, \
     implicit, tol_R, alpha, d_tolman = args
-    return bubble.grow(dt0, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
+    return bubble.grow(dt0, t_nuc, p_s, R_nuc, L, p_in, v,
                      polyol_data_file, eos_co2_file, adaptive_dt=adaptive_dt,
                      implicit=implicit, d_tolman=d_tolman,
                      tol_R=tol_R, alpha=alpha, D=D)
