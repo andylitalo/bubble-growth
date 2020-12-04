@@ -376,7 +376,7 @@ def init_sub(R_min, R_i, R_o, N, d, v, p_s, dc_c_s_frac, polyol_data_file, t_i=0
 
     """
     # creates grid of radii from bubble radius to inner wall of capillary [m]
-    r_arr = np.linspace(R_min, R_o, N+1)
+    r_arr = make_r_arr_lin(None, R_o, N=N, R_min=R_min)
 
     # creates initial concentration profile [kg CO2 / m^3 polyol-CO2]
     c_0 = np.zeros([N+1])
@@ -397,6 +397,15 @@ def init_sub(R_min, R_i, R_o, N, d, v, p_s, dc_c_s_frac, polyol_data_file, t_i=0
     fixed_params = (dc, interp_arrs)
 
     return t, c, r_arr, c_0, c_s, t_f, fixed_params
+
+
+def make_r_arr_lin(dr, R_max, N=-1, R_min=0):
+    """Makes numpy array of radius with spacing dr from R_min to R_max."""
+    if N <= 0:
+        N = int((R_max-R_min)/dr)
+    r_arr = np.linspace(R_min, R_max, N+1)
+
+    return r_arr
 
 
 def neumann(c, i, j, dcdr, r_arr):

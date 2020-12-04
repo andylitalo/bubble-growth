@@ -28,10 +28,55 @@ m_2_nm = 1E9
 
 
 
-def compare_dcdr(N_list, dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v, R_max,
+def calc_dcdr_diff(t, dcdr, t_c, dcdr_c):
+    """
+    Calculates the difference in the concentration gradient dc/dr at the
+    surface of the bubble, interpolating to have matching time points.
+    """
+    dcdr_c_arr = np.interp(t, t_c, dcdr_c)
+    dcdr_arr = np.asarray(dcdr)
+    dcdr_diff = np.abs(dcdr_c_arr - dcdr_arr) / dcdr_arr
+
+    return dcdr_diff
+
+
+def compare_dcdr_ep(eps_input, num_input_list, num_fn_list,
+                    i_c=1, i_dr=-1):
+    """
+    Compares concentration gradient dc/dr at the surface of the bubble for
+    different numerical outputs against the Epstein-Plesset solution.
+
+    Assumes numerical functions return the same ordering of variables as output.
+
+    eps_input = (dt, t_nuc, p_s, R_nuc, p_atm, L,
+                p_in, v, polyol_data_file, eos_co2_file)
+    """
+    # first performs Epstein-Plesset computation as benchmark
+    t_eps, m, D, p, p_bub, if_tension,\
+    c_s, c_bulk, R, rho_co2 = bubble.grow(*eps_input)
+    # computes concentration gradient at bubble interface
+    dcdr_eps = bubble.calc_dcdr_eps(c_bulk, c_s, R, D, np.asarray(t_eps) - t_nuc)
+
+    # initializes list of fractional differences in dc/dr b/w E-P and numerical
+    dcdr_diff_list = []
+
+    # computes dc/dr for numerical functions
+    for input, fn in (num_input_list, num_fn_list):
+        output = fn(*input)
+        c = output[i_c]
+        dr_list = output[i_dr]
+        # uses 2nd-order Taylor stencil to compute dc/dr at r = 0
+        dcdr_num = fd.dydx_fwd_2nd(c[0], c[1], c[2], dr_list[0])
+        # computes fractional difference from dc/dr with E-P model
+        dcdr_diff_list += [calc_dcdr_diff(t_eps, dcdr_eps, t_num, dcdr_num)]
+
+    return t_eps, dcdr_diff_list
+
+
+def calc_dcdr_ep_fix_D(N_list, dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v, R_max,
                     polyol_data_file, eos_co2_file, dt_max_list=None):
     """
-    Compares concentration gradient at interface of bubble b/w Epstein-Plesset
+    Calculates concentration gradient at interface of bubble b/w Epstein-Plesset
     model and numerical model.
     """
     # initializes list of numerically computed concentration gradients
@@ -55,15 +100,14 @@ def compare_dcdr(N_list, dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v, R_max,
         # performs simulation
         t_flow, c, t_num, m, D, p, \
         p_bub, if_tension, c_bub, \
-        c_bulk, R, rho_co2, v, r_arr = bubbleflow.numerical_eps_pless_fix_D( \
+        c_bulk, R, rho_co2, v, dr_list = bubbleflow.num_fix_D( \
                                         dt, t_nuc, p_s, R_nuc, L, p_in, v,
                                         R_max, N, polyol_data_file, eos_co2_file,
                                         dt_max=dt_max)
 
         # uses 2nd-order Taylor stencil
-        dr = r_arr[1] - r_arr[0]
-        dcdr_num_list += [[fd.dydx_fwd_2nd(c[i][0], c[i][1], c[i][2], dr) \
-                            for i in range(len(c))]]
+        dcdr_num_list += [[fd.dydx_fwd_2nd(c[i][0], c[i][1], c[i][2], \
+                                            dr_list[0]) for i in range(len(c))]]
         # saves list of times [s]
         t_num_list += [t_num]
 
