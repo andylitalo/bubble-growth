@@ -40,8 +40,29 @@ def calc_dcdr_diff(t, dcdr, t_c, dcdr_c):
     return dcdr_diff
 
 
-def compare_dcdr_ep(eps_input, num_input_list, num_fn_list,
+def compare_dcdr(num_input_list, num_fn_list, t_ref, dcdr_ref,
                     i_c=1, i_dr=-1):
+    """
+    Compares concentration gradient dc/dr at the surface of the bubble for
+    different numerical outputs against the reference.
+    Assumes numerical functions return the same ordering of variables as output.
+    """
+    # initializes list of fractional differences in dc/dr from reference
+    dcdr_diff_list = []
+    # computes dc/dr for numerical functions
+    for input, fn in (num_input_list, num_fn_list):
+        output = fn(*input)
+        c = output[i_c]
+        dr_list = output[i_dr]
+        # uses 2nd-order Taylor stencil to compute dc/dr at r = 0
+        dcdr_num = fd.dydx_fwd_2nd(c[0], c[1], c[2], dr_list[0])
+        # computes fractional difference from dc/dr with E-P model
+        dcdr_diff_list += [calc_dcdr_diff(t_ref, dcdr_ref, t_num, dcdr_num)]
+
+    return dcdr_diff_list
+
+
+def compare_dcdr_eps(num_input_list, num_fn_list, eps_input):
     """
     Compares concentration gradient dc/dr at the surface of the bubble for
     different numerical outputs against the Epstein-Plesset solution.
@@ -57,18 +78,8 @@ def compare_dcdr_ep(eps_input, num_input_list, num_fn_list,
     # computes concentration gradient at bubble interface
     dcdr_eps = bubble.calc_dcdr_eps(c_bulk, c_s, R, D, np.asarray(t_eps) - t_nuc)
 
-    # initializes list of fractional differences in dc/dr b/w E-P and numerical
-    dcdr_diff_list = []
-
-    # computes dc/dr for numerical functions
-    for input, fn in (num_input_list, num_fn_list):
-        output = fn(*input)
-        c = output[i_c]
-        dr_list = output[i_dr]
-        # uses 2nd-order Taylor stencil to compute dc/dr at r = 0
-        dcdr_num = fd.dydx_fwd_2nd(c[0], c[1], c[2], dr_list[0])
-        # computes fractional difference from dc/dr with E-P model
-        dcdr_diff_list += [calc_dcdr_diff(t_eps, dcdr_eps, t_num, dcdr_num)]
+    # computes fractional differences in dc/dr b/w E-P and numerical
+    dcdr_diff_list = compare_dcdr(num_input_list, num_fn_list, t_eps, dcdr_eps)
 
     return t_eps, dcdr_diff_list
 
