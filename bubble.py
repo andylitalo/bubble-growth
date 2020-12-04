@@ -493,7 +493,7 @@ def init(p_in, p_s, t_nuc, R_nuc, v, L, D, polyol_data_file,
     t_f = L/v
 
     # collects fixed parameters
-    fixed_params = (t_nuc, D, p_in, p_s, P_ATM, v, L, c_bulk, c_s_interp_arrs,
+    fixed_params = (t_nuc, D, p_in, p_s, v, L, c_bulk, c_s_interp_arrs,
                     if_interp_arrs, f_rho_co2, d_tolman, implicit)
 
     return t, m, D, p, p_bub, if_tension, c_s, c_bulk, R, rho_co2, t_f, \
@@ -667,7 +667,7 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, dt, p_s, R_nuc,
         t_nuc = (t_nuc_lo + t_nuc_hi)/2
         # computes bubble growth trajectory with new bubble nucleation time
         t, m, D, p, p_bub, if_tension, c_s, R, f_rho_co2 = \
-                growth_fn(dt, t_nuc, p_s, R_nuc, P_ATM, L, p_in, v,
+                growth_fn(dt, t_nuc, p_s, R_nuc, L, p_in, v,
                                  polyol_data_file, eos_co2_file)
         # finds index of timeline corresponding to measurement of bubble size
         i_bubble = next(i for i in range(len(t)) if t[i] >= t_bubble)

@@ -54,7 +54,7 @@ def grow(dt_sheath, dt, dcdt_fn, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s,
     # v is computed with diffn.init above
     p_in = P_ATM - dp
     t_bub, m, D, p, p_bub, if_tension, c_bub, \
-    c_s, R, rho_co2, _, fixed_params_bub = bubble.init(p_in, P_ATM, p_s, t_nuc,
+    c_s, R, rho_co2, _, fixed_params_bub = bubble.init(p_in, p_s, t_nuc,
                                             R_nuc, v, L, D, polyol_data_file,
                                             eos_co2_file, if_tension_model,
                                             d_tolman, implicit)
