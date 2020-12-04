@@ -117,6 +117,11 @@ def bc_bub_cap(c_bub, c_max=0):
     return [(diffn.dirichlet, 0, c_bub), (diffn.dirichlet, -1, c_max)]
 
 
+def half_grid(arr):
+    """Halves the number of points in the grid by removing every other point."""
+    return arr[::2]
+
+
 def numerical_eps_pless_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
                      polyol_data_file, eos_co2_file, adaptive_dt=True,
                      if_tension_model='lin', implicit=False, d_tolman=0,
@@ -191,7 +196,8 @@ def numerical_eps_pless_vary_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
                              tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
                              R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
                              time_step_fn=bubble.time_step_dcdr,
-                             D_fn=polyco2.calc_D_lin):
+                             D_fn=polyco2.calc_D_lin,
+                             half_grid=False):
     """
     Peforms numerical computation of diffusion into bubble from bulk accounting
     for effect of concentration of CO2 on the local diffusivity D.
@@ -216,6 +222,8 @@ def numerical_eps_pless_vary_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
     D_params = polyco2.lin_fit_D_c(*interp_arrs)
     # initializes list of diffusivities
     D = []
+    # initializes list of grid spacings [m]
+    dr_list = []
 
     # TIME-STEPPING -- BUBBLE NUCLEATES AND GROWS
     while t_bub[-1] <= t_f:
@@ -239,6 +247,16 @@ def numerical_eps_pless_vary_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
                             rho_co2)
 
         # SHEATH FLOW
+        # first considers coarsening the grid by half if resolution of
+        # concentration gradient is sufficient
+        if half_grid:
+            dr = r_arr[1] - r_arr[0]
+            dcdr = (c[1] - c[0]) / dr
+            if 2*dr < c_bulk / (pts_per_grad * dcdr):
+                r_arr = half_grid(r_arr)
+                c[-1] = half_grid(c[-1])
+                dr = r_arr[1] - r_arr[0]
+            dr_list += [dr]
         # calculates properties after one time step with updated
         # boundary conditions
         # adds bubble radius R to grid of radii since r_arr starts at bubble
@@ -249,5 +267,11 @@ def numerical_eps_pless_vary_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t_flow, c)
 
+    # returns list of grid spacings if grid-halving; o/w returns full grid
+    if half_grid:
+        r_param = dr_list
+    else:
+        r_param = r_arr
+
     return t_flow, c, t_bub, m, D, p, p_bub, if_tension, c_bub, c_bulk, R, \
-            rho_co2, v, r_arr
+            rho_co2, v, r_param
