@@ -35,7 +35,7 @@ def time_step(dt, t_prev, m_prev, p_prev, if_tension_prev, R_prev, rho_co2_prev,
 
     Must come before grow() so it can be the default time_step_fn parameter.
     """
-    t_nuc, D, p_in, p_s, p_atm, v, L, c_bulk, c_s_interp_arrs, \
+    t_nuc, D, p_in, p_s, v, L, c_bulk, c_s_interp_arrs, \
             if_interp_arrs, f_rho_co2, d_tolman, implicit = fixed_params
     t = t_prev + dt # increments time forward [s]
     p = flow.calc_p(p_in, P_ATM, v, t, L) # computes new pressure along observation capillary [Pa]
@@ -68,11 +68,9 @@ def time_step(dt, t_prev, m_prev, p_prev, if_tension_prev, R_prev, rho_co2_prev,
     return dt, t, m, p, p_bub, if_tension, c_s, R, rho_co2
 
 
-def grow(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
-                     polyol_data_file, eos_co2_file, adaptive_dt=True,
-                     if_tension_model='lin', implicit=False, d_tolman=0,
-                     tol_R=0.001, alpha=0.3, D=-1, drop_t_term=False,
-                     time_step_fn=time_step):
+def grow(dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file,
+         adaptive_dt=True, if_tension_model='lin', implicit=False, d_tolman=0,
+         tol_R=0.001, alpha=0.3, D=-1, drop_t_term=False, time_step_fn=time_step):
     """
     Solves for bubble growth based on Epstein and Plesset (1950) with
     modifications for changing pressure (p) and interfacial tension (if_tension).
@@ -91,8 +89,6 @@ def grow(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
         R_nuc : float
             approximate radius of initial bubble nucleus, based on
             Dr. Huikuan Chao's string method model [m]
-        p_atm : float
-            atmospheric pressure [Pa], assumed to be the pressure at the outlet
         L : float
             length of observation capillary [m]
         p_in : float
@@ -139,7 +135,7 @@ def grow(dt, t_nuc, p_s, R_nuc, p_atm, L, p_in, v,
             CO2 equation of state [kg/m^3]
     """
     t, m, D, p, p_bub, if_tension, c_s, \
-    c_bulk, R, rho_co2, t_f, fixed_params = init(p_in, p_atm, p_s, t_nuc, R_nuc,
+    c_bulk, R, rho_co2, t_f, fixed_params = init(p_in, p_s, t_nuc, R_nuc,
                                             v, L, D, polyol_data_file,
                                             eos_co2_file, if_tension_model,
                                             d_tolman, implicit)
@@ -455,7 +451,7 @@ def calc_m_R_p_bub(m0, R0, p_bub0, c_bulk, c_s, D, m_prev, p, t, dt,
     return m, R, p_bub
 
 
-def init(p_in, p_atm, p_s, t_nuc, R_nuc, v, L, D, polyol_data_file,
+def init(p_in, p_s, t_nuc, R_nuc, v, L, D, polyol_data_file,
             eos_co2_file, if_tension_model, d_tolman, implicit):
     """
     Initializes parameters used in grow() for bubble growth.
@@ -655,7 +651,7 @@ def update_props(props, t, m, p, p_bub, if_tension, c_s, R, rho_co2):
 
 
 def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, dt, p_s, R_nuc,
-                     p_atm, L, p_in, v, polyol_data_file, eos_co2_file,
+                     L, p_in, v, polyol_data_file, eos_co2_file,
                      tol_R=0.01, ax=None, growth_fn=grow):
     """
     Fits the bubble growth to a given bubble radius at a given time. Plots

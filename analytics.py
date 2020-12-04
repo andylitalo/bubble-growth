@@ -69,7 +69,7 @@ def compare_dcdr_eps(num_input_list, num_fn_list, eps_input):
 
     Assumes numerical functions return the same ordering of variables as output.
 
-    eps_input = (dt, t_nuc, p_s, R_nuc, p_atm, L,
+    eps_input = (dt, t_nuc, p_s, R_nuc, L,
                 p_in, v, polyol_data_file, eos_co2_file)
     """
     # first performs Epstein-Plesset computation as benchmark

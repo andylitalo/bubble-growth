@@ -199,14 +199,13 @@ def num_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
 
 
 def num_vary_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
-                             polyol_data_file, eos_co2_file, dc_c_s_frac,
-                             adaptive_dt=True,
-                             if_tension_model='lin', implicit=False, d_tolman=0,
-                             tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
-                             R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
-                             time_step_fn=bubble.time_step_dcdr,
-                             D_fn=polyco2.calc_D_lin,
-                             half_grid=False, pts_per_grad=20):
+                 polyol_data_file, eos_co2_file, dc_c_s_frac,
+                 dt_max=None, D_fn=polyco2.calc_D_lin,
+                 half_grid=False, pts_per_grad=10, adaptive_dt=True,
+                 if_tension_model='lin', implicit=False, d_tolman=0,
+                 tol_R=0.001, alpha=0.3, D=-1,
+                 R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
+                 time_step_fn=bubble.time_step_dcdr):
     """
     Peforms numerical computation of diffusion into bubble from bulk accounting
     for effect of concentration of CO2 on the local diffusivity D.
