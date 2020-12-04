@@ -142,12 +142,12 @@ def num_fix_D(eps_params, R_max, N, adaptive_dt=True,
     dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
     # INITIALIZES BUBBLE PARAMETERS
     t_bub, m, D, p, p_bub, if_tension, c_bub, \
-    c_bulk, R, rho_co2, _, fixed_params_tmp = bubble.init(p_in, P_ATM, p_s, t_nuc,
+    c_bulk, R, rho_co2, _, fixed_params_tmp = bubble.init(p_in, p_s, t_nuc,
                                             R_nuc, v, L, D, polyol_data_file,
                                             eos_co2_file, if_tension_model,
                                             d_tolman, implicit)
     # extracts relevant parameters from bubble initiation
-    _, D, p_in, p_s, p_atm, v, L, _, c_s_interp_arrs, \
+    _, D, p_in, p_s, v, L, _, c_s_interp_arrs, \
     if_interp_arrs, f_rho_co2, d_tolman, _ = fixed_params_tmp
     # collects parameters relevant for bubble growth
     fixed_params_bub = (D, p_in, p_s, v, L, c_s_interp_arrs, if_interp_arrs,
@@ -220,12 +220,12 @@ def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
     dc, interp_arrs = fixed_params
     # INITIALIZES BUBBLE PARAMETERS
     t_bub, m, D, p, p_bub, if_tension, c_bub, \
-    c_bulk, R, rho_co2, _, fixed_params_tmp = bubble.init(p_in, P_ATM, p_s, t_nuc,
+    c_bulk, R, rho_co2, _, fixed_params_tmp = bubble.init(p_in, p_s, t_nuc,
                                             R_nuc, v, L, -1, polyol_data_file,
                                             eos_co2_file, if_tension_model,
                                             d_tolman, implicit)
     # extracts relevant parameters from bubble initiation
-    _, _, p_in, p_s, p_atm, v, L, _, c_s_interp_arrs, \
+    _, _, p_in, p_s, v, L, _, c_s_interp_arrs, \
     if_interp_arrs, f_rho_co2, d_tolman, _ = fixed_params_tmp
 
     # prepares arrays for interpolating D(c)
