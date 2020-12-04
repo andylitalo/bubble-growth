@@ -117,8 +117,13 @@ def bc_bub_cap(c_bub, c_max=0):
     return [(diffn.dirichlet, 0, c_bub), (diffn.dirichlet, -1, c_max)]
 
 
-def half_grid(arr):
-    """Halves the number of points in the grid by removing every other point."""
+def halve_grid(arr):
+    """
+    Halves the number of points in the grid by removing every other point.
+    Assumes grid has N + 1 elements, where N is divisible by 2.
+    The resulting grid will have N/2 + 1 elements.
+    """
+    print('halving grid')
     return arr[::2]
 
 
@@ -197,7 +202,7 @@ def numerical_eps_pless_vary_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
                              R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
                              time_step_fn=bubble.time_step_dcdr,
                              D_fn=polyco2.calc_D_lin,
-                             half_grid=False):
+                             half_grid=False, pts_per_grad=20):
     """
     Peforms numerical computation of diffusion into bubble from bulk accounting
     for effect of concentration of CO2 on the local diffusivity D.
@@ -223,7 +228,7 @@ def numerical_eps_pless_vary_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
     # initializes list of diffusivities
     D = []
     # initializes list of grid spacings [m]
-    dr_list = []
+    dr_list = [r_arr[1]-r_arr[0]]
 
     # TIME-STEPPING -- BUBBLE NUCLEATES AND GROWS
     while t_bub[-1] <= t_f:
@@ -251,12 +256,18 @@ def numerical_eps_pless_vary_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
         # concentration gradient is sufficient
         if half_grid:
             dr = r_arr[1] - r_arr[0]
-            dcdr = (c[1] - c[0]) / dr
+            dcdr = c[-1][1] / dr # assumes c(r=0) = 0
             if 2*dr < c_bulk / (pts_per_grad * dcdr):
-                r_arr = half_grid(r_arr)
-                c[-1] = half_grid(c[-1])
+                r_arr = halve_grid(r_arr)
+                c[-1] = halve_grid(c[-1])
                 dr = r_arr[1] - r_arr[0]
+                # quadruples maximum time step since limit on time step is
+                # proportional to spatial resolution squared
+                if dt_max is not None:
+                    dt_max *= 4
+
             dr_list += [dr]
+
         # calculates properties after one time step with updated
         # boundary conditions
         # adds bubble radius R to grid of radii since r_arr starts at bubble
