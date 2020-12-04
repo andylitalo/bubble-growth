@@ -62,19 +62,19 @@ def compare_dcdr(num_input_list, num_fn_list, t_ref, dcdr_ref,
     return dcdr_diff_list
 
 
-def compare_dcdr_eps(num_input_list, num_fn_list, eps_input):
+def compare_dcdr_eps(num_input_list, num_fn_list, eps_params):
     """
     Compares concentration gradient dc/dr at the surface of the bubble for
     different numerical outputs against the Epstein-Plesset solution.
 
     Assumes numerical functions return the same ordering of variables as output.
 
-    eps_input = (dt, t_nuc, p_s, R_nuc, L,
+    eps_params = (dt, t_nuc, p_s, R_nuc, L,
                 p_in, v, polyol_data_file, eos_co2_file)
     """
     # first performs Epstein-Plesset computation as benchmark
     t_eps, m, D, p, p_bub, if_tension,\
-    c_s, c_bulk, R, rho_co2 = bubble.grow(*eps_input)
+    c_s, c_bulk, R, rho_co2 = bubble.grow(*eps_params)
     # computes concentration gradient at bubble interface
     dcdr_eps = bubble.calc_dcdr_eps(c_bulk, c_s, R, D, np.asarray(t_eps) - t_nuc)
 
@@ -84,12 +84,13 @@ def compare_dcdr_eps(num_input_list, num_fn_list, eps_input):
     return t_eps, dcdr_diff_list
 
 
-def calc_dcdr_eps_fix_D(N_list, dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max,
-                    polyol_data_file, eos_co2_file, dt_max_list=None):
+def calc_dcdr_eps_fix_D(N_list, R_max, eps_params, dt_max_list=None):
     """
     Calculates concentration gradient at interface of bubble b/w Epstein-Plesset
     model and numerical model.
     """
+    # extracts parameters used in Epstein-Plesset model
+    dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
     # initializes list of numerically computed concentration gradients
     dcdr_num_list = []
     # initializes list of times [s]

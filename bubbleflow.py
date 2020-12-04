@@ -127,8 +127,7 @@ def halve_grid(arr):
     return arr[::2]
 
 
-def num_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
-                     polyol_data_file, eos_co2_file, adaptive_dt=True,
+def num_fix_D(eps_params, R_max, N, adaptive_dt=True,
                      if_tension_model='lin', implicit=False, d_tolman=0,
                      tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
                      R_min=0, dcdt_fn=diffn.calc_dcdt_sph_fix_D,
@@ -139,6 +138,8 @@ def num_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
     this will be modified to include the effects of a concentration-dependent
     diffusivity in num_vary_D().
     """
+    # extracts parameters used in Epstein-Plesset model
+    dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
     # INITIALIZES BUBBLE PARAMETERS
     t_bub, m, D, p, p_bub, if_tension, c_bub, \
     c_bulk, R, rho_co2, _, fixed_params_tmp = bubble.init(p_in, P_ATM, p_s, t_nuc,
@@ -198,8 +199,7 @@ def num_fix_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
                 rho_co2, v, dr_list
 
 
-def num_vary_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
-                 polyol_data_file, eos_co2_file, dc_c_s_frac,
+def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
                  dt_max=None, D_fn=polyco2.calc_D_lin,
                  half_grid=False, pts_per_grad=10, adaptive_dt=True,
                  if_tension_model='lin', implicit=False, d_tolman=0,
@@ -210,6 +210,8 @@ def num_vary_D(dt, t_nuc, p_s, R_nuc, L, p_in, v, R_max, N,
     Peforms numerical computation of diffusion into bubble from bulk accounting
     for effect of concentration of CO2 on the local diffusivity D.
     """
+    # extracts parameters used in Epstein-Plesset model
+    dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
     # INITIALIZES PARAMETERS FOR DIFFUSION IN BULK
     # assumes no sheath (i.e. R_i = R_o)
     t_flow, c, r_arr, _, _, \
