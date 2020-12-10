@@ -21,6 +21,8 @@ import polyco2
 
 # CONSTANTS
 from constants import *
+# CONVERSIONS
+from conversions import *
 
 
 ############################ FUNCTION DEFINITIONS ##############################
@@ -346,11 +348,10 @@ def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
             rho_co2, v, dr_list
 
 
-def sheath_incompressible(eps_params, R_max, N, dc_c_s_frac, R_i,
-                 dt_max=None, D_fn=polyco2.calc_D_lin,
-                 half_grid=False, pts_per_grad=5, adaptive_dt=True,
-                 if_tension_model='lin', implicit=False, d_tolman=0,
-                 tol_R=0.001, alpha=0.3, D=-1,
+def sheath_incompressible(eps_params, R_max, N, dc_c_s_frac, R_i, dt_sheath,
+                 D_fn=polyco2.calc_D_lin, half_grid=False, pts_per_grad=5,
+                 adaptive_dt=True, if_tension_model='lin', implicit=False,
+                 d_tolman=0, tol_R=0.001, alpha=0.3, D=-1, t_i=0,
                  R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
                  time_step_fn=bubble.time_step_dcdr):
     """
@@ -362,9 +363,98 @@ def sheath_incompressible(eps_params, R_max, N, dc_c_s_frac, R_i,
     rather than default infinity. This function just puts a new name on the
     computation.
     """
-    return num_vary_D(eps_params, R_max, N, dc_c_s_frac, dt_max=dt_max,
-                    D_fn=D_fn, half_grid=half_grid, pts_per_grad=pts_per_grad,
-                    adaptive_dt=adaptive_dt, if_tension_model=if_tension_model,
-                    implicit=implict, d_tolman=d_tolman, tol_R=tol_R,
-                    alpha=alpha, D=D, R_i=R_i, R_min=R_min, dcdt_fn=dcdt_fn,
-                    time_step_fn=time_step_fn)
+    # extracts parameters used in Epstein-Plesset model
+    dt0, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
+    # INITIALIZES PARAMETERS FOR DIFFUSION IN BULK
+    # assumes no sheath (i.e. R_i = R_o)
+    t_flow, c, r_arr, _, _, \
+    t_f, fixed_params = diffn.init_sub(R_min, R_i, R_max, N, L, v, p_s,
+                                        dc_c_s_frac, polyol_data_file, t_i=t_i)
+    dc, interp_arrs = fixed_params
+    # extracts "bulk" concentration from outer edge of initial profile [kg/m^3]
+    c_wall = c[0][-1]
+
+    # INITIALIZES BUBBLE PARAMETERS
+    t_bub, m, D, p, p_bub, if_tension, c_bub, \
+    c_bulk, R, rho_co2, _, fixed_params_tmp = bubble.init(p_in, p_s, t_nuc,
+                                            R_nuc, v, L, -1, polyol_data_file,
+                                            eos_co2_file, if_tension_model,
+                                            d_tolman, implicit)
+    # extracts relevant parameters from bubble initiation
+    _, _, p_in, p_s, v, L, _, c_s_interp_arrs, \
+    if_interp_arrs, f_rho_co2, d_tolman, _ = fixed_params_tmp
+
+    # initializes list of diffusivities
+    D = []
+    # initializes list of grid spacings [m]
+    dr_list = [r_arr[1]-r_arr[0]]
+    # initializes time step at sheath time step [s]
+    dt = dt_sheath
+    # counter for marking progress
+    ctr = 0
+
+    # TIME-STEPPING -- BUBBLE NUCLEATES AND GROWS
+    while t_flow[-1] <= t_f:
+
+        # prints out progress
+        if t_flow[-1] >= ctr/10*t_f:
+            print('{0:d}% complete, t = {1:.3f} ms.'.format(10*ctr, t_flow[-1]*s_2_ms))
+            ctr += 1
+
+        ########### BUBBLE GROWTH #########
+        # only grows bubble if past nucleation time
+        if t_flow[-1] >= t_nuc:
+            # first time step should be the one from the Epstein-Plesset params
+            if t_flow[-1] - dt < t_nuc:
+                dt = dt0
+            # collects parameters for time-stepping method
+            D += [D_fn(c_bub[-1])]
+            fixed_params_bub = (D[-1], p_in, p_s, v, L, c_s_interp_arrs,
+                                    if_interp_arrs, f_rho_co2, d_tolman)
+            time_step_params = (t_bub[-1], m[-1], if_tension[-1], R[-1],
+                                    rho_co2[-1], r_arr, c[-1], fixed_params_bub)
+            if adaptive_dt:
+                dt, props_bub = bubble.adaptive_time_step(dt, time_step_params,
+                                                        time_step_fn, tol_R,
+                                                        alpha, dt_max=dt_sheath)
+            else:
+                # calculates properties after one time step
+                props_bub = time_step_fn(dt, *time_step_params)
+
+            # updates properties of bubble at new time step
+            bubble.update_props(props_bub, t_bub, m, p, p_bub, if_tension,
+                                c_bub, R, rho_co2)
+
+        ######### SHEATH FLOW #############
+        # first checks if the next time step will pass the nucleation time
+        # if so, shortens the time step to reach the nucleation time exactly
+        if t_flow[-1] + dt >= t_nuc:
+            # shortens time step [s]
+            dt = t_nuc - t_flow[-1]
+        # then considers coarsening the grid by half if resolution of
+        # concentration gradient is sufficient
+        dr = r_arr[1] - r_arr[0]
+        if half_grid:
+            dcdr = c[-1][1] / dr # assumes c(r=0) = 0
+            if 2*dr < c_bulk / (pts_per_grad * dcdr):
+                r_arr = halve_grid(r_arr)
+                c[-1] = halve_grid(c[-1])
+                dr = r_arr[1] - r_arr[0]
+                # quadruples time step since limit is proportional to grid
+                # spacing squared, and grid spacing increased by 2
+                if dt_sheath is not None:
+                    dt_sheath *= 4
+        # stores grid spacing
+        dr_list += [dr]
+        # calculates properties after one time step with updated
+        # boundary conditions
+        # adds bubble radius R to grid of radii since r_arr starts at bubble
+        # interface
+        fixed_params_flow = (R[-1], dc, D_fn)
+        props_flow = diffn.time_step(dt, t_flow[-1], r_arr, c[-1], dcdt_fn,
+                        bc_bub_cap(c_bub[-1], c_max=c_wall), fixed_params_flow)
+        # stores properties at new time step in lists
+        diffn.update_props(props_flow, t_flow, c)
+
+    return t_flow, c, t_bub, m, D, p, p_bub, if_tension, c_bub, c_bulk, R, \
+            rho_co2, v, dr_list

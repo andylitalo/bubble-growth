@@ -160,7 +160,16 @@ def grow(dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file,
 
 def adaptive_time_step(dt, time_step_params, time_step_fn, tol_R, alpha, dt_max=None):
     """
+    Previously incremented time step by alpha after taking the appropriate time
+    step, but then the returned time step was larger than the time step taken.
     """
+    # time step is increased to speed up calculation if remains below maximum
+    if (dt_max is None) or (dt*(1+alpha) < dt_max):
+        # increases time step for next calculation
+        dt *= (1 + alpha)
+
+    # compares time step with twice the size to ensure discrepancy is within
+    # tolerance
     while True:
         # calculates properties for two time steps
         props_a = time_step_fn(dt, *time_step_params)
@@ -170,10 +179,6 @@ def adaptive_time_step(dt, time_step_params, time_step_fn, tol_R, alpha, dt_max=
         R_b = props_b[-2]
         # checks if the discrepancy in the radius is below tolerance
         if np.abs( (R_a - R_b) / R_a) <= tol_R:
-            # only increases time step if it will remain below maximum
-            if (dt_max is None) or (dt*(1+alpha) < dt_max):
-                # increases time step for next calculation
-                dt *= (1 + alpha)
             # takes properties calculated with smaller time step
             props = props_a
             # breaks loop now that time step met tolerance
