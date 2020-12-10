@@ -619,8 +619,6 @@ def time_step_dcdr(dt, t_prev, m_prev, if_tension_prev, R_prev,
     R0 = (3/(4*np.pi)*m_prev/rho_co2_prev)**(1./3) #p[-1] + 2*if_tension[-1]/R0
     p_bub0 = p + 2*if_tension_prev/R0 #p_bub[-1]
 
-
-
     # updates mass with explicit Euler method--inputs are i^th terms,
     # so we pass in R[-1] since R has not been updated to R_{i+1} yet
     m = m_prev + dt*calc_dmdt_dcdr_fix_D(r_arr, c_arr, R_prev, D)

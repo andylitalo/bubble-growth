@@ -214,7 +214,7 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, fixed_params):
         the boundary conditions)
     """
     # extracts fixed parameters
-    R, dc, D_params, D_fn = fixed_params
+    R, dc, D_fn = fixed_params
     r_arr = xi_arr + R
     # and their corresponding radii
     r_arr_c = r_arr[1:-1]
@@ -223,7 +223,7 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, fixed_params):
     # and the corresponding concentrations
     c_arr_c = c_arr[1:-1]
     # computes diffusivity constant at each point on grid [m^2/s]
-    D_arr = np.asarray([D_fn(c, D_params) for c in c_arr_c])
+    D_arr = np.asarray([D_fn(c) for c in c_arr_c])
 
     # FIRST TERM: 2/r * D(c) * dc/dr
     # computes spatial derivative of concentration dc/dr with central difference
@@ -232,7 +232,7 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, fixed_params):
 
     # SECOND TERM: dD/dc * (dc/dr)^2
     # computes dD/dc [m^2/s / kg/m^3]
-    dDdc_arr = np.asarray([polyco2.calc_dDdc_fn(c, dc, D_params, D_fn) \
+    dDdc_arr = np.asarray([polyco2.calc_dDdc_fn(c, dc, D_fn) \
                                                     for c in c_arr_c])
     term2 = dDdc_arr * (dcdr_arr)**2
 

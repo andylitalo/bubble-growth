@@ -28,20 +28,20 @@ m_2_nm = 1E9
 
 
 
-def calc_dcdr_diff(t_ref, dcdr_ref, t, dcdr):
+def calc_diff(t_ref, ref, t, val):
     """
     Calculates the difference in the concentration gradient dc/dr at the
     surface of the bubble, interpolating to have matching time points.
     """
-    dcdr_arr = np.interp(t_ref, t, dcdr)
-    dcdr_ref_arr = np.asarray(dcdr_ref)
-    dcdr_diff = np.abs(dcdr_arr - dcdr_ref_arr) / dcdr_ref_arr
+    val_arr = np.interp(t_ref, t, val)
+    ref_arr = np.asarray(ref)
+    diff = np.abs(val_arr - ref_arr) / ref_arr
 
-    return dcdr_diff
+    return diff
 
 
 def compare_dcdr(num_input_list, num_fn_list, t_ref, dcdr_ref,
-                    i_c=1, i_t_num=2, i_dr=-1):
+                    i_t_flow=0, i_c=1, i_t_num=2, i_dr=-1):
     """
     Compares concentration gradient dc/dr at the surface of the bubble for
     different numerical outputs against the reference.
@@ -49,11 +49,15 @@ def compare_dcdr(num_input_list, num_fn_list, t_ref, dcdr_ref,
     """
     # initializes list of fractional differences in dc/dr from reference
     dcdr_diff_list = []
+    dr_list_list = []
+    t_flow_list = []
+    raw_vals_list = []
 
     # computes dc/dr for numerical functions
     for input, fn in zip(num_input_list, num_fn_list):
         print('Computing {0:s}'.format(str(fn)))
         output = fn(*input)
+        t_flow = output[i_t_flow]
         c = output[i_c]
         t_num = output[i_t_num]
         dr_list = output[i_dr]
@@ -61,10 +65,17 @@ def compare_dcdr(num_input_list, num_fn_list, t_ref, dcdr_ref,
         # uses 2nd-order Taylor stencil to compute dc/dr at r = 0
         dcdr_num = [fd.dydx_fwd_2nd(c[i][0], c[i][1], c[i][2], dr_list[i]) for \
                             i in range(len(c))]
+        # collects raw values used to compute the fractional deviation in dc/dr
+        raw_vals = (t_ref, dcdr_ref, t_num, dcdr_num)
         # computes fractional difference from dc/dr with E-P model
-        dcdr_diff_list += [calc_dcdr_diff(t_ref, dcdr_ref, t_num, dcdr_num)]
+        dcdr_diff_list += [calc_diff(*raw_vals)]
 
-    return dcdr_diff_list
+        # stores values for output
+        dr_list_list += [dr_list]
+        t_flow_list += [t_flow]
+        raw_vals_list += [raw_vals]
+
+    return dcdr_diff_list, dr_list_list, t_flow_list, raw_vals_list
 
 
 def compare_dcdr_eps(num_input_list, num_fn_list, eps_params):
@@ -115,12 +126,12 @@ def calc_dcdr_eps_fix_D(N_list, R_max, eps_params, dt_max_list=None):
         else:
             dt_max = None
         # performs simulation
+        eps_params = (dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, \
+                        eos_co2_file)
         t_flow, c, t_num, m, D, p, \
         p_bub, if_tension, c_bub, \
-        c_bulk, R, rho_co2, v, dr_list = bubbleflow.num_fix_D( \
-                                        dt, t_nuc, p_s, R_nuc, L, p_in, v,
-                                        R_max, N, polyol_data_file, eos_co2_file,
-                                        dt_max=dt_max)
+        c_bulk, R, rho_co2, v, dr_list = bubbleflow.num_fix_D(eps_params, \
+                                                    R_max, N, dt_max=dt_max)
 
         # uses 2nd-order Taylor stencil
         dcdr_num_list += [[fd.dydx_fwd_2nd(c[i][0], c[i][1], c[i][2], \
@@ -129,6 +140,38 @@ def calc_dcdr_eps_fix_D(N_list, R_max, eps_params, dt_max_list=None):
         t_num_list += [t_num]
 
     return t_eps, dcdr_eps, t_num_list, dcdr_num_list
+
+
+def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
+                    i_R=10, i_t_num=2, i_dr=-1):
+    """
+    Follow up to compare_dcdr(). Compares the predicted radius of the bubble
+    under different numerical schemes to a reference (typically the Epstein-
+    Plesset model).
+    """
+    # initializes list of fractional differences in dc/dr from reference
+    R_diff_list = []
+    t_num_list = []
+    dr_list_list = []
+    raw_vals_list = []
+
+    # computes dc/dr for numerical functions
+    for input, fn in zip(num_input_list, num_fn_list):
+        print('Computing {0:s}'.format(str(fn)))
+        output = fn(*input)
+        R = output[i_R]
+        t_num = output[i_t_num]
+        dr_list = output[i_dr]
+
+        raw_vals = (t_ref, R_ref, t_num, R)
+        R_diff_list += [calc_diff(*raw_vals)]
+
+        # stores values for output
+        dr_list_list += [dr_list]
+        t_num_list += [t_num]
+        raw_vals_list += [raw_vals]
+
+    return R_diff_list, dr_list_list, raw_vals_list
 
 
 def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,

@@ -23,6 +23,9 @@ import polyco2
 from constants import *
 
 
+############################ FUNCTION DEFINITIONS ##############################
+
+
 def grow(dt_sheath, dt, dcdt_fn, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s,
          dc_c_s_frac, t_nuc, R_nuc, polyol_data_file, eos_co2_file, bc_specs_list,
          if_tension_model='lin', d_tolman=0, adaptive_dt=True, implicit=False,
@@ -39,7 +42,13 @@ def grow(dt_sheath, dt, dcdt_fn, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s,
         Time step for modeling diffusion in sheath flow without a bubble [s].
         Typically larger than dt.
     dt : float
-        Time step for modeling bubble growth [s]. Typically smaller than dt_sheath.
+        Initial time step for modeling bubble growth [s]. Typically smaller than
+        dt_sheath.
+    dcdt_fn : function
+        Function for computing the time derivative of the concentration at each
+        point on the grid, dc/dt(r) [kg/m^3 / s]
+    R_o : float
+        Outer stream radius [m]
     """
     # initializes parameters for CO2 diffusion in sheath flow
     # uses t_f = d/v the final time is the distance to which to perform the
@@ -102,10 +111,23 @@ def grow(dt_sheath, dt, dcdt_fn, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s,
 
 def bc_bub_cap(c_bub, c_max=0):
     """
-    c_bub is concentration of CO2 at interface of bubble [kg/m^3].
-
-    Fixes concentration at inner wall of capillary to c_max (default 0).
+    Fixes concentration of CO2 at inner wall of capillary to c_max (default 0).
     Fixed concentration at bubble surface (saturation concentration).
+
+    Parameters
+    ----------
+    c_bub : float
+        Concentration of CO2 at interface of bubble [kg/m^3].
+    c_max : float, optional
+        Concentration at inner wall of capillary, default 0 [kg/m^3]
+
+    Returns
+    -------
+    bc : list of two 3-tuples
+        List of boundary conditions. First is at surface of bubble, second at
+        inner wall of capillary. Each tuple contains the function for applying
+        the boundary condition, the index of the grid to apply it at, and the
+        value to set.
     """
     return [(diffn.dirichlet, 0, c_bub), (diffn.dirichlet, -1, c_max)]
 
@@ -130,6 +152,50 @@ def num_fix_D(eps_params, R_max, N, adaptive_dt=True,
     Once confirmed to provide accurate estimation of Epstein-Plesset result,
     this will be modified to include the effects of a concentration-dependent
     diffusivity in num_vary_D().
+
+    Parameters
+    ----------
+    eps_params : 9-tuple
+        Positional parameters for bubble.grow() Epstein-Plesset model
+    R_max : float
+        Maximum value of radius in grid [m]
+    N : int
+        mesh size (so # of grid points = N+1)
+
+    Return
+    ------
+    t_flow : list of floats
+        times at which concentration in flow was evaluated [s]
+    c : list of lists of floats
+        list of concentrations at each grid point for each time point in t_flow
+        [kg/m^3]
+    t_bub : list of floats
+        times at which the bubble growth was evaluated [s]
+    m : list of floats
+        mass of CO2 in bubble at each time in t_bub [kg]
+    D : float
+        diffusivity [m^2/s]
+    p : list of floats
+        pressure in channel at each time point in t_bub [Pa]
+    p_bub : list of floats
+        pressure inside bubble at each time point in t_bub (includes Laplace
+        pressure) [Pa]
+    if_tension : list of floats
+        interfacial tension at interface of bubble at each time point in t_bub
+        [N/m]
+    c_bub : list of floats
+        concentration of CO2 at surface of bubble at each time point in t_bub
+        [kg/m^3]
+    c_bulk : float
+        concentration of CO2 in the bulk liquid [kg/m^3]
+    R : list of floats
+        radius of bubble at each time point in t_bub [m]
+    rho_co2 : list of floats
+        density of CO2 inside the bubble at each time point in t_bub [kg/m^3]
+    v : float
+        maximum velocity of inner stream assuming Poiseuille flow [m/s]
+    dr_list : list of floats
+        grid spacing at each time in t_flow [m]
     """
     # extracts parameters used in Epstein-Plesset model
     dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
@@ -194,9 +260,9 @@ def num_fix_D(eps_params, R_max, N, adaptive_dt=True,
 
 def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
                  dt_max=None, D_fn=polyco2.calc_D_lin,
-                 half_grid=False, pts_per_grad=10, adaptive_dt=True,
+                 half_grid=False, pts_per_grad=5, adaptive_dt=True,
                  if_tension_model='lin', implicit=False, d_tolman=0,
-                 tol_R=0.001, alpha=0.3, D=-1,
+                 tol_R=0.001, alpha=0.3, D=-1, R_i=np.inf,
                  R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
                  time_step_fn=bubble.time_step_dcdr):
     """
@@ -208,9 +274,12 @@ def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
     # INITIALIZES PARAMETERS FOR DIFFUSION IN BULK
     # assumes no sheath (i.e. R_i = R_o)
     t_flow, c, r_arr, _, _, \
-    t_f, fixed_params = diffn.init_sub(R_min, R_max, R_max, N, L, v, p_s,
+    t_f, fixed_params = diffn.init_sub(R_min, R_i, R_max, N, L, v, p_s,
                                         dc_c_s_frac, polyol_data_file, t_i=t_nuc)
     dc, interp_arrs = fixed_params
+    # extracts "bulk" concentration from outer edge of initial profile [kg/m^3]
+    c_wall = c[0][-1]
+
     # INITIALIZES BUBBLE PARAMETERS
     t_bub, m, D, p, p_bub, if_tension, c_bub, \
     c_bulk, R, rho_co2, _, fixed_params_tmp = bubble.init(p_in, p_s, t_nuc,
@@ -221,8 +290,6 @@ def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
     _, _, p_in, p_s, v, L, _, c_s_interp_arrs, \
     if_interp_arrs, f_rho_co2, d_tolman, _ = fixed_params_tmp
 
-    # prepares arrays for interpolating D(c)
-    D_params = polyco2.lin_fit_D_c(*interp_arrs)
     # initializes list of diffusivities
     D = []
     # initializes list of grid spacings [m]
@@ -231,12 +298,12 @@ def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
     # TIME-STEPPING -- BUBBLE NUCLEATES AND GROWS
     while t_bub[-1] <= t_f:
         # collects parameters for time-stepping method
-        D += [D_fn(c_bub[-1], D_params)]
+        D += [D_fn(c_bub[-1])]
         fixed_params_bub = (D[-1], p_in, p_s, v, L, c_s_interp_arrs,
                                 if_interp_arrs, f_rho_co2, d_tolman)
         time_step_params = (t_bub[-1], m[-1], if_tension[-1], R[-1],
                                 rho_co2[-1], r_arr, c[-1], fixed_params_bub)
-        # BUBBLE GROWTH
+        ########### BUBBLE GROWTH #########
         if adaptive_dt:
             dt, props_bub = bubble.adaptive_time_step(dt, time_step_params,
                                                     time_step_fn, tol_R, alpha,
@@ -249,7 +316,7 @@ def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
         bubble.update_props(props_bub, t_bub, m, p, p_bub, if_tension, c_bub, R,
                             rho_co2)
 
-        # SHEATH FLOW
+        ######### SHEATH FLOW #############
         # first considers coarsening the grid by half if resolution of
         # concentration gradient is sufficient
         dr = r_arr[1] - r_arr[0]
@@ -263,19 +330,41 @@ def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
                 # proportional to spatial resolution squared
                 if dt_max is not None:
                     dt_max *= 4
-
         # stores grid spacing
         dr_list += [dr]
-
         # calculates properties after one time step with updated
         # boundary conditions
         # adds bubble radius R to grid of radii since r_arr starts at bubble
         # interface
-        fixed_params_flow = (R[-1], dc, D_params, D_fn)
+        fixed_params_flow = (R[-1], dc, D_fn)
         props_flow = diffn.time_step(dt, t_flow[-1], r_arr, c[-1], dcdt_fn,
-                        bc_bub_cap(c_bub[-1], c_max=c_bulk), fixed_params_flow)
+                        bc_bub_cap(c_bub[-1], c_max=c_wall), fixed_params_flow)
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t_flow, c)
 
     return t_flow, c, t_bub, m, D, p, p_bub, if_tension, c_bub, c_bulk, R, \
             rho_co2, v, dr_list
+
+
+def sheath_incompressible(eps_params, R_max, N, dc_c_s_frac, R_i,
+                 dt_max=None, D_fn=polyco2.calc_D_lin,
+                 half_grid=False, pts_per_grad=5, adaptive_dt=True,
+                 if_tension_model='lin', implicit=False, d_tolman=0,
+                 tol_R=0.001, alpha=0.3, D=-1,
+                 R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
+                 time_step_fn=bubble.time_step_dcdr):
+    """
+    Couples the diffusion in the sheath flow around the bubble with the growth
+    of the bubble and assumes that the sheath is incompressible and that the
+    walls of the fluid are pushed outward as the bubble grows.
+
+    The only difference from num_vary_D() is that R_i is a required parameter
+    rather than default infinity. This function just puts a new name on the
+    computation.
+    """
+    return num_vary_D(eps_params, R_max, N, dc_c_s_frac, dt_max=dt_max,
+                    D_fn=D_fn, half_grid=half_grid, pts_per_grad=pts_per_grad,
+                    adaptive_dt=adaptive_dt, if_tension_model=if_tension_model,
+                    implicit=implict, d_tolman=d_tolman, tol_R=tol_R,
+                    alpha=alpha, D=D, R_i=R_i, R_min=R_min, dcdt_fn=dcdt_fn,
+                    time_step_fn=time_step_fn)
