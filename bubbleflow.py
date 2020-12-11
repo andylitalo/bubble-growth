@@ -134,6 +134,29 @@ def bc_bub_cap(c_bub, c_max=0):
     return [(diffn.dirichlet, 0, c_bub), (diffn.dirichlet, -1, c_max)]
 
 
+def bc_cap(c_max=0):
+    """
+    Fixes concentration of CO2 at inner wall of capillary to c_max (default 0).
+    Applies symmetry condition at center of capillary by setting dc/dr = 0.
+
+    Parameters
+    ----------
+    c_max : float, optional
+        Concentration at inner wall of capillary, default 0 [kg/m^3]
+
+    Returns
+    -------
+    bc : list of two 3-tuples
+        List of boundary conditions. First is at center of capillary, second at
+        inner wall of capillary. Each tuple contains the function for applying
+        the boundary condition, the index of the grid to apply it at, and the
+        value to set.
+    """
+    # artificial array for computing derivative at indices 0 and 1.
+    r_arr = np.array([0, 1])
+    return [(diffn.neumann, 0, 1, 0, r_arr), (diffn.dirichlet, -1, c_max)]
+
+
 def halve_grid(arr):
     """
     Halves the number of points in the grid by removing every other point.
@@ -384,10 +407,13 @@ def sheath_incompressible(eps_params, R_max, N, dc_c_s_frac, R_i, dt_sheath,
     _, _, p_in, p_s, v, L, _, c_s_interp_arrs, \
     if_interp_arrs, f_rho_co2, d_tolman, _ = fixed_params_tmp
 
+    # initializes boundary conditions for sheath flow (no bubble)
+    bc_specs_list = bc_cap(c_max=c_wall)
     # initializes list of diffusivities
     D = []
     # initializes list of grid spacings [m]
     dr_list = [r_arr[1]-r_arr[0]]
+    dr = dr_list[-1]
     # initializes time step at sheath time step [s]
     dt = dt_sheath
     # counter for marking progress
@@ -424,26 +450,30 @@ def sheath_incompressible(eps_params, R_max, N, dc_c_s_frac, R_i, dt_sheath,
             # updates properties of bubble at new time step
             bubble.update_props(props_bub, t_bub, m, p, p_bub, if_tension,
                                 c_bub, R, rho_co2)
+            # updates boundary condition with concentration at bubble surface
+            bc_specs_list = bc_bub_cap(c_bub[-1], c_max=c_wall)
+
+            # once bubble has nucleated considers coarsening the grid by half
+            # if resolution of concentration gradient is sufficient
+            dr = r_arr[1] - r_arr[0]
+            if half_grid:
+                dcdr = c[-1][1] / dr # assumes c(r=0) = 0
+                if 2*dr < c_bulk / (pts_per_grad * dcdr):
+                    r_arr = halve_grid(r_arr)
+                    c[-1] = halve_grid(c[-1])
+                    dr = r_arr[1] - r_arr[0]
+                    # quadruples time step since limit is proportional to grid
+                    # spacing squared, and grid spacing increased by 2
+                    if dt_sheath is not None:
+                        dt_sheath *= 4
 
         ######### SHEATH FLOW #############
-        # first checks if the next time step will pass the nucleation time
-        # if so, shortens the time step to reach the nucleation time exactly
-        if t_flow[-1] + dt >= t_nuc:
+        # if the next time step will surpass the nucleation time for the first
+        # time, shorten it so it exactly reaches the nucleation time
+        if (t_flow[-1] + dt >= t_nuc) and (t_flow[-1] < t_nuc):
             # shortens time step [s]
             dt = t_nuc - t_flow[-1]
-        # then considers coarsening the grid by half if resolution of
-        # concentration gradient is sufficient
-        dr = r_arr[1] - r_arr[0]
-        if half_grid:
-            dcdr = c[-1][1] / dr # assumes c(r=0) = 0
-            if 2*dr < c_bulk / (pts_per_grad * dcdr):
-                r_arr = halve_grid(r_arr)
-                c[-1] = halve_grid(c[-1])
-                dr = r_arr[1] - r_arr[0]
-                # quadruples time step since limit is proportional to grid
-                # spacing squared, and grid spacing increased by 2
-                if dt_sheath is not None:
-                    dt_sheath *= 4
+
         # stores grid spacing
         dr_list += [dr]
         # calculates properties after one time step with updated
@@ -452,7 +482,7 @@ def sheath_incompressible(eps_params, R_max, N, dc_c_s_frac, R_i, dt_sheath,
         # interface
         fixed_params_flow = (R[-1], dc, D_fn)
         props_flow = diffn.time_step(dt, t_flow[-1], r_arr, c[-1], dcdt_fn,
-                        bc_bub_cap(c_bub[-1], c_max=c_wall), fixed_params_flow)
+                        bc_specs_list, fixed_params_flow)
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t_flow, c)
 
