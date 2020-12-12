@@ -175,7 +175,8 @@ def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
 
 
 def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
-                     i_t_nuc, sigma_R=0.01, ax=None, max_iter=12):
+                     i_t_nuc, sigma_R=0.01, ax=None, max_iter=12, i_t=0,
+                     i_R=8):
     """
     Fits the bubble growth to a given bubble radius at a given time. Plots
     the different trajectories if an axis handle is given.
@@ -211,8 +212,11 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
         t_nuc = (t_nuc_lo + t_nuc_hi)/2
         # computes bubble growth trajectory with new bubble nucleation time
         args[i_t_nuc] = t_nuc
-        t, m, D, p, p_bubble, if_tension, \
-                        c_s, c_bulk, R, rho_co2 = growth_fn(*tuple(args))
+        output = growth_fn(*tuple(args))
+        # extracts time and radius of bubble growth trajectory from output
+        t = output[i_t] # [s]
+        R = output[i_R] # [m]
+
         # finds index of timeline corresponding to measurement of bubble size
         i_bubble = next(i for i in range(len(t)) if t[i] >= t_bubble)
         R_bubble_pred = R[i_bubble]
@@ -254,9 +258,7 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
         legend_y = 0.5
         plt.legend(loc='center left', bbox_to_anchor=(legend_x, legend_y))
 
-    results = (t, m, D, p, p_bubble, if_tension, c_s, c_bulk, R, rho_co2)
-
-    return t_nuc, results
+    return t_nuc, output
 
 
 def time_step_convergence(growth_model, dt_list, t_nuc, p_s, R_nuc, L,
