@@ -407,6 +407,23 @@ def make_r_arr_lin(dr, R_max, N=-1, R_min=0):
 
     return r_arr
 
+def make_r_arr_log(dr, R_max, R_min=0):
+    """
+    Makes numpy array of the radius with logarithmic spacing,
+    dr, dr, 2dr, 4dr, 8dr, etc. from R_min to R_max.
+    """
+    assert R_max - R_min > dr, "grid spacing must be smaller than grid"
+    # number of multiples of dr that can be fit in array
+    N = int((R_max-R_min)/dr)
+    # takes log2 of N to determine number of mesh points
+    n_pts = int(np.floor(np.log2(N)))
+    r_list = [R_min, R_min+dr]
+    for i in range(n_pts):
+        r_list += [r_list[-1] + (2**i)*dr]
+    r_list[-1] = R_max
+
+    return np.array(r_list)
+
 
 def neumann(c, i, j, dcdr, r_arr):
     """
