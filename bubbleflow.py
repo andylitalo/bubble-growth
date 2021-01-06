@@ -167,7 +167,7 @@ def halve_grid(arr):
     return arr[::2]
 
 
-def num_fix_D(eps_params, R_max, N, adaptive_dt=True,
+def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
                      if_tension_model='lin', implicit=False, d_tolman=0,
                      tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
                      R_min=0, dcdt_fn=diffn.calc_dcdt_sph_fix_D,
@@ -181,7 +181,7 @@ def num_fix_D(eps_params, R_max, N, adaptive_dt=True,
 
     Parameters
     ----------
-    eps_params : 9-tuple
+    eps_params : 8-tuple
         Positional parameters for bubble.grow() Epstein-Plesset model
     R_max : float
         Maximum value of radius in grid [m]
@@ -226,7 +226,7 @@ def num_fix_D(eps_params, R_max, N, adaptive_dt=True,
         grid spacing at each time in t_flow [m]
     """
     # extracts parameters used in Epstein-Plesset model
-    dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
+    dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
     # INITIALIZES BUBBLE PARAMETERS
     t_bub, m, D, p, p_bub, if_tension, c_bub, \
     c_bulk, R, rho_co2, _, fixed_params_tmp = bubble.init(p_in, p_s, t_nuc,
@@ -289,7 +289,7 @@ def num_fix_D(eps_params, R_max, N, adaptive_dt=True,
                 rho_co2, v, dr_list
 
 
-def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
+def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
                  dt_max=None, D_fn=polyco2.calc_D_lin,
                  half_grid=False, pts_per_grad=5, adaptive_dt=True,
                  if_tension_model='lin', implicit=False, d_tolman=0,
@@ -305,7 +305,7 @@ def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
     Simply set the optional parameter "half_grid" to True.
     """
     # extracts parameters used in Epstein-Plesset model
-    dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
+    dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
     # INITIALIZES PARAMETERS FOR DIFFUSION IN BULK
     # assumes no sheath (i.e. R_i = R_o)
     t_flow, c, r_arr, _, _, \
@@ -381,7 +381,7 @@ def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
             rho_co2, v, dr_list
 
 
-def sheath_incompressible(eps_params, R_max, N, dc_c_s_frac, R_i, dt_sheath,
+def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i, dt_sheath,
                  D_fn=polyco2.calc_D_lin, half_grid=False, pts_per_grad=5,
                  adaptive_dt=True, if_tension_model='lin', implicit=False,
                  d_tolman=0, tol_R=0.001, alpha=0.3, D=-1, t_i=0,
@@ -397,7 +397,7 @@ def sheath_incompressible(eps_params, R_max, N, dc_c_s_frac, R_i, dt_sheath,
     computation.
     """
     # extracts parameters used in Epstein-Plesset model
-    dt0, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
+    dt0, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
     # INITIALIZES PARAMETERS FOR DIFFUSION IN BULK
     # assumes no sheath (i.e. R_i = R_o)
     t_flow, c, r_arr, _, _, \
