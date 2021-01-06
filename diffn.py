@@ -179,6 +179,68 @@ def calc_dcdt_sph_fix_D(xi_arr, c_arr, fixed_params):
 
     return dcdt
 
+def calc_dcdt_sph_fix_D_nonuniform(xi_arr, c_arr, fixed_params):
+    """
+    Computes the time derivative of concentration dc/dt in spherical
+    coordinates assuming concentration dependent diffusivity constant.
+
+    In spherical coordinates Fick's law of dc/dt = div(D(c)grad(c)) becomes:
+
+            dc/dt = 2/r*D(c)*dc/dr + dD/dc*(dc/dr)^2 + D(c)*d2c/dr2
+
+    assuming spherical symmetry.
+
+    Parameters
+    ----------
+    xi_arr : numpy array of N+1 floats
+        radial coordinates of points in mesh measured from radius of bubble [m]
+        *May be a nonuniform grid
+    c_arr : numpy array of N+1 floats
+        concentrations of CO2 at each of the points in r_arr
+        [kg CO2 / m^3 polyol-co2]
+    fixed_params: list
+        D : float
+            diffusivity of CO2 in polyol (fixed) [m^2/s]
+        R : float
+            radius of bubble [m]
+
+    Returns
+    -------
+    dcdt : numpy array of N-1 floats
+        time derivatives of concentration at each of the interior mesh points
+        (the concentrations at the end points at i=0 and i=N+1 are computed by
+        the boundary conditions)
+    """
+    # extracts fixed parameters
+    D, R = fixed_params
+    r_arr = xi_arr + R
+    # and their corresponding radii
+    r_arr_c = r_arr[1:-1]
+
+    # FIRST TERM: 2/r * D(c) * dc/dr
+    # computes spatial derivative of concentration dc/dr with central difference
+    # see eqn 2.20 from Parviz Moin's "Fundamentals of Engineering Numerical
+    # Analysis" (p. 23)
+    dcdr_arr = (c_arr[2:] - c_arr[:-2]) / (r_arr[2:] - r_arr[:-2])
+    term1 = 2/r_arr_c * D * dcdr_arr
+
+    # SECOND TERM: D(c) * d2c/dr2
+    # computes second spatial derivative of concentration with formula for
+    # non uniform grids in eqn 2.21 from Parviz Moin's "Fundamentals of
+    # Engineering Numerical Analysis" (p. 23)
+    c0 = c_arr[:-2]
+    c1 = c_arr[1:-1]
+    c2 = c_arr[2:]
+    h1 = r_arr[1:-1] - r_arr[:-2]
+    h2 = r_arr[2:] - r_arr[1:-1]
+
+    d2cdr2_arr = 2*( c0 / (h1*(h1+h2)) - c1/(h1*h2) + c2/(h2*(h1+h2)) )
+    term2 = D * d2cdr2_arr
+
+    dcdt = term1 + term2
+
+    return dcdt
+
 
 def calc_dcdt_sph_vary_D(xi_arr, c_arr, fixed_params):
     """
@@ -399,28 +461,36 @@ def init_sub(R_min, R_i, R_o, N, d, v, p_s, dc_c_s_frac, polyol_data_file, t_i=0
     return t, c, r_arr, c_0, c_s, t_f, fixed_params
 
 
-def make_r_arr_lin(dr, R_max, N=-1, R_min=0):
+def make_r_arr_lin(N, R_max, R_min=0):
     """Makes numpy array of radius with spacing dr from R_min to R_max."""
-    if N <= 0:
-        N = int((R_max-R_min)/dr)
     r_arr = np.linspace(R_min, R_max, N+1)
 
     return r_arr
 
-def make_r_arr_log(dr, R_max, R_min=0):
+def make_r_arr_log(N, R_max, k=1.5, R_min=0):
     """
     Makes numpy array of the radius with logarithmic spacing,
     dr, dr, 2dr, 4dr, 8dr, etc. from R_min to R_max.
     """
-    assert R_max - R_min > dr, "grid spacing must be smaller than grid"
-    # number of multiples of dr that can be fit in array
-    N = int((R_max-R_min)/dr)
-    # takes log2 of N to determine number of mesh points
-    n_pts = int(np.floor(np.log2(N)))
+    # number of points in grid is log_k(delta_R). Use log formula for different
+    # log bases
+    d = (R_max - R_min) / (k**N - 1)
+    z = np.arange(0, N+1)
+    r_arr = (k**z - 1)*d
+
+    return r_arr
+
+def make_r_arr_log2(N, R_max, R_min=0):
+    """
+    Makes numpy array of the radius with logarithmic spacing,
+    dr, dr, 2dr, 4dr, 8dr, etc. from R_min to R_max.
+    This one allows the user to specify the number of points. The minimum grid
+    spacing is then grid length / 2^(N-1).
+    """
+    dr = (R_max - R_min) / 2**(N-1)
     r_list = [R_min, R_min+dr]
-    for i in range(n_pts):
+    for i in range(N-1):
         r_list += [r_list[-1] + (2**i)*dr]
-    r_list[-1] = R_max
 
     return np.array(r_list)
 
