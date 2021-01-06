@@ -192,9 +192,10 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
 
     # computes bubble growth trajectory with lowest nucleation time
     args[i_t_nuc] = t_nuc_lo
-    t, m, D, p, p_bubble, if_tension, c_s, \
-                                c_bulk, R, rho_co2 = growth_fn(*tuple(args))
-
+    output = growth_fn(*tuple(args))
+    t = output[i_t]
+    R = output[i_R]
+    
         # finds index of timeline corresponding to measurement of bubble size
     i_bubble = next(i for i in range(len(t)) if t[i] >= t_bubble)
     R_bubble_pred = R[i_bubble]
