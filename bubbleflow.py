@@ -382,7 +382,7 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
 
 
 def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i, dt_sheath,
-                 D_fn=polyco2.calc_D_lin, half_grid=False, pts_per_grad=5,
+                 D_fn=polyco2.calc_D_lin, half_grid=True, pts_per_grad=5,
                  adaptive_dt=True, if_tension_model='lin', implicit=False,
                  d_tolman=0, tol_R=0.001, alpha=0.3, D=-1, t_i=0,
                  R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,

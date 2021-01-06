@@ -438,7 +438,7 @@ def init_sub(R_min, R_i, R_o, N, d, v, p_s, dc_c_s_frac, polyol_data_file, t_i=0
 
     """
     # creates grid of radii from bubble radius to inner wall of capillary [m]
-    r_arr = make_r_arr_lin(None, R_o, N=N, R_min=R_min)
+    r_arr = make_r_arr_lin(N, R_o, R_min=R_min)
 
     # creates initial concentration profile [kg CO2 / m^3 polyol-CO2]
     c_0 = np.zeros([N+1])
