@@ -167,12 +167,39 @@ def halve_grid(arr):
     return arr[::2]
 
 
-def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
-                     if_tension_model='lin', implicit=False, d_tolman=0,
-                     tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
-                     R_min=0, dcdt_fn=diffn.calc_dcdt_sph_fix_D,
-                     time_step_fn=bubble.time_step_dcdr,
-                     grid_fn=diffn.make_r_arr_lin):
+def manage_grid_halving(r_arr, c, c_bulk, dt_max, pts_per_grad):
+    """
+    Manages halving of grid by checking if the gradient is resolved by a
+    sufficient number of grid points and, if not, halving the grid (decimating
+    every other point) and adjusting the maximum time step accordingly.
+    """
+    dr = r_arr[1] - r_arr[0]
+    if 2*pts_per_grad < len(r_arr):
+        dcdr = (c[-1][1]-c[-1][0]) / dr
+        # width of region with desired number of points for gradient after halving
+        delta_r = r_arr[2*pts_per_grad] - r_arr[0]
+        # difference between minimum and maximum concentrations
+        delta_c = c_bulk# - c[-1][0]
+        # halves grid if gradient has enough mesh points
+        if dcdr*delta_r < delta_c:
+            r_arr = halve_grid(r_arr)
+            c[-1] = halve_grid(c[-1])
+            dr_new = r_arr[1] - r_arr[0]
+            # quadruples maximum time step since limit on time step is
+            # proportional to spatial resolution squared
+            if dt_max is not None:
+                dt_max *= (dr_new / dr)**2
+            dr = dr_new
+
+    return r_arr, dr, dt_max
+
+
+def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True, half_grid=False,
+                    pts_per_grad=10, if_tension_model='lin', implicit=False,
+                    d_tolman=0, tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
+                    R_min=0, dcdt_fn=diffn.calc_dcdt_sph_fix_D,
+                    time_step_fn=bubble.time_step_dcdr,
+                    grid_fn=diffn.make_r_arr_lin):
     """
     Performs numerical computation of Epstein-Plesset model for comparison.
     Once confirmed to provide accurate estimation of Epstein-Plesset result,
@@ -271,13 +298,21 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
         bubble.update_props(props_bub, t_bub, m, p, p_bub, if_tension, c_bub, R,
                             rho_co2)
 
-        # SHEATH FLOW
+        ######### SHEATH FLOW #############
+        # first considers coarsening the grid by half if resolution of
+        # concentration gradient is sufficient
+        dr = r_arr[1] - r_arr[0]
+        if half_grid:
+            r_arr, dr, dt_max = manage_grid_halving(r_arr, c, c_bulk, dt_max, pts_per_grad)
+
+        # stores grid spacing
+        dr_list += [dr]
+
         # calculates properties after one time step with updated
         # boundary conditions
         # adds bubble radius R to grid of radii since r_arr starts at bubble
         # interface
         # for now, uses same grid spacing for each time step
-        dr_list += [r_arr[1] - r_arr[0]]
         # computes time step
         fixed_params_flow = (D, R[-1])
         props_flow = diffn.time_step(dt, t_flow[-1], r_arr, c[-1], dcdt_fn,
@@ -291,7 +326,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
 
 def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
                  dt_max=None, D_fn=polyco2.calc_D_lin,
-                 half_grid=False, pts_per_grad=5, adaptive_dt=True,
+                 half_grid=False, pts_per_grad=10, adaptive_dt=True,
                  if_tension_model='lin', implicit=False, d_tolman=0,
                  tol_R=0.001, alpha=0.3, D=-1, R_i=np.inf,
                  R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
@@ -356,15 +391,7 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
         # concentration gradient is sufficient
         dr = r_arr[1] - r_arr[0]
         if half_grid:
-            dcdr = c[-1][1] / dr # assumes c(r=0) = 0
-            if 2*dr < c_bulk / (pts_per_grad * dcdr):
-                r_arr = halve_grid(r_arr)
-                c[-1] = halve_grid(c[-1])
-                dr = r_arr[1] - r_arr[0]
-                # quadruples maximum time step since limit on time step is
-                # proportional to spatial resolution squared
-                if dt_max is not None:
-                    dt_max *= 4
+            r_arr, dr, dt_max = manage_grid_halving(r_arr, c, c_bulk, dt_max, pts_per_grad)
         # stores grid spacing
         dr_list += [dr]
         # calculates properties after one time step with updated
@@ -467,15 +494,7 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i, dt_shea
             # if resolution of concentration gradient is sufficient
             dr = r_arr[1] - r_arr[0]
             if half_grid:
-                dcdr = c[-1][1] / dr # assumes c(r=0) = 0
-                if 2*dr < c_bulk / (pts_per_grad * dcdr):
-                    r_arr = halve_grid(r_arr)
-                    c[-1] = halve_grid(c[-1])
-                    dr = r_arr[1] - r_arr[0]
-                    # quadruples time step since limit is proportional to grid
-                    # spacing squared, and grid spacing increased by 2
-                    if dt_sheath is not None:
-                        dt_sheath *= 4
+                r_arr, dr, dt_max = manage_grid_halving(r_arr, c, c_bulk, dt_max, pts_per_grad)
 
         ######### SHEATH FLOW #############
         # if the next time step will surpass the nucleation time for the first
