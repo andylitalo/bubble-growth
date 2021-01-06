@@ -68,7 +68,7 @@ def time_step(dt, t_prev, m_prev, p_prev, if_tension_prev, R_prev, rho_co2_prev,
     return dt, t, m, p, p_bub, if_tension, c_s, R, rho_co2
 
 
-def grow(dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file,
+def grow(t_nuc, dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file,
          adaptive_dt=True, if_tension_model='lin', implicit=False, d_tolman=0,
          tol_R=0.001, alpha=0.3, D=-1, drop_t_term=False, time_step_fn=time_step):
     """
@@ -78,61 +78,63 @@ def grow(dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file,
     Difference from eps_pless_p_if_4:
         -Uses Tolman length correction of interfacial tension
 
-    Parameters:
-        dt : float
-            time step [s]
-        t_nuc : float
-            time of bubble nucleation measured after entering
-            observation capillary [s]
-        p_s : float
-            saturation pressure of CO2 in polyol [Pa]
-        R_nuc : float
-            approximate radius of initial bubble nucleus, based on
-            Dr. Huikuan Chao's string method model [m]
-        L : float
-            length of observation capillary [m]
-        p_in : float
-            pressure at inlet [m], calculated using flow.sheath_eqns
-        v : float
-            velocity of inner stream [m/s], calculated using flow.sheath_eqns
-        polyol_data_file : string
-            name of file containing polyol data [.csv]
-        eos_co2_file : string
-            File name for equation of state data table [.csv]
-        d_tolman : float
-            Tolman length for correction of interfacial tension due to
-            curvature [m].
+    Parameters
+    ----------
+    t_nuc : float
+        time of bubble nucleation measured after entering
+        observation capillary [s]
+    dt : float
+        time step [s]
+    p_s : float
+        saturation pressure of CO2 in polyol [Pa]
+    R_nuc : float
+        approximate radius of initial bubble nucleus, based on
+        Dr. Huikuan Chao's string method model [m]
+    L : float
+        length of observation capillary [m]
+    p_in : float
+        pressure at inlet [m], calculated using flow.sheath_eqns
+    v : float
+        velocity of inner stream [m/s], calculated using flow.sheath_eqns
+    polyol_data_file : string
+        name of file containing polyol data [.csv]
+    eos_co2_file : string
+        File name for equation of state data table [.csv]
+    d_tolman : float
+        Tolman length for correction of interfacial tension due to
+        curvature [m].
 
-    Returns:
-        t : list of N floats
-            times at which numerical model was evaluated, measured relative
-            to time of entering observation capillary [s]
-        m : list of N floats
-            mass of CO2 enclosed in bubble at each time step [g]
-        D : list of N floats
-            diffusivity at each time step estimated from experimental G-ADSA
-            measurements (averaged exp & sqrt) [m^2/s]
-        p : list of N floats
-            pressure at each time step assuming linear pressure drop along
-            channel [Pa]
-        p_bub : list of N floats
-            pressure inside bubble at each time step
-        if_tension : list of N floats
-            interfacial tension along bubble surface at each time step based on
-            G-ADSA measurements [N/m]
-        c_s : list of N floats
-            saturation concentrations of CO2 in polyol at each time step based
-            on G-ADSA solubility and density measurements
-            [kg CO2 / m^3 polyol-CO2]
-        c_bulk : float
-            bulk concentration of CO2 in polyol at given saturation pressure
-            [kg CO2 / m^3 polyol-CO2]
-        R : list of N floats
-            radius of bubble at each time step solved self-consistently with
-            modified Epstein-Plesset (1950) [m]
-        rho_co2 : list of N floats
-            density of CO2 in bubble at each time step based on pressure and
-            CO2 equation of state [kg/m^3]
+    Returns
+    -------
+    t : list of N floats
+        times at which numerical model was evaluated, measured relative
+        to time of entering observation capillary [s]
+    m : list of N floats
+        mass of CO2 enclosed in bubble at each time step [g]
+    D : list of N floats
+        diffusivity at each time step estimated from experimental G-ADSA
+        measurements (averaged exp & sqrt) [m^2/s]
+    p : list of N floats
+        pressure at each time step assuming linear pressure drop along
+        channel [Pa]
+    p_bub : list of N floats
+        pressure inside bubble at each time step
+    if_tension : list of N floats
+        interfacial tension along bubble surface at each time step based on
+        G-ADSA measurements [N/m]
+    c_s : list of N floats
+        saturation concentrations of CO2 in polyol at each time step based
+        on G-ADSA solubility and density measurements
+        [kg CO2 / m^3 polyol-CO2]
+    c_bulk : float
+        bulk concentration of CO2 in polyol at given saturation pressure
+        [kg CO2 / m^3 polyol-CO2]
+    R : list of N floats
+        radius of bubble at each time step solved self-consistently with
+        modified Epstein-Plesset (1950) [m]
+    rho_co2 : list of N floats
+        density of CO2 in bubble at each time step based on pressure and
+        CO2 equation of state [kg/m^3]
     """
     t, m, D, p, p_bub, if_tension, c_s, \
     c_bulk, R, rho_co2, t_f, fixed_params = init(p_in, p_s, t_nuc, R_nuc,
