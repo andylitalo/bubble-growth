@@ -78,19 +78,19 @@ def compare_dcdr(num_input_list, num_fn_list, t_ref, dcdr_ref,
     return dcdr_diff_list, dr_list_list, t_flow_list, raw_vals_list
 
 
-def compare_dcdr_eps(num_input_list, num_fn_list, eps_params):
+def compare_dcdr_eps(num_input_list, num_fn_list, t_nuc, eps_params):
     """
     Compares concentration gradient dc/dr at the surface of the bubble for
     different numerical outputs against the Epstein-Plesset solution.
 
     Assumes numerical functions return the same ordering of variables as output.
 
-    eps_params = (dt, t_nuc, p_s, R_nuc, L,
+    eps_params = (dt, p_s, R_nuc, L,
                 p_in, v, polyol_data_file, eos_co2_file)
     """
     # first performs Epstein-Plesset computation as benchmark
     t_eps, m, D, p, p_bub, if_tension,\
-    c_s, c_bulk, R, rho_co2 = bubble.grow(*eps_params)
+    c_s, c_bulk, R, rho_co2 = bubble.grow(t_nuc, *eps_params)
     # computes concentration gradient at bubble interface
     dcdr_eps = bubble.calc_dcdr_eps(c_bulk, c_s, R, D, np.asarray(t_eps) - t_nuc)
 
@@ -100,13 +100,13 @@ def compare_dcdr_eps(num_input_list, num_fn_list, eps_params):
     return t_eps, dcdr_diff_list
 
 
-def calc_dcdr_eps_fix_D(N_list, R_max, eps_params, dt_max_list=None):
+def calc_dcdr_eps_fix_D(N_list, R_max, t_nuc, eps_params, dt_max_list=None):
     """
     Calculates concentration gradient at interface of bubble b/w Epstein-Plesset
     model and numerical model.
     """
     # extracts parameters used in Epstein-Plesset model
-    dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
+    dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
     # initializes list of numerically computed concentration gradients
     dcdr_num_list = []
     # initializes list of times [s]
@@ -126,11 +126,11 @@ def calc_dcdr_eps_fix_D(N_list, R_max, eps_params, dt_max_list=None):
         else:
             dt_max = None
         # performs simulation
-        eps_params = (dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, \
+        eps_params = (dt, p_s, R_nuc, L, p_in, v, polyol_data_file, \
                         eos_co2_file)
         t_flow, c, t_num, m, D, p, \
         p_bub, if_tension, c_bub, \
-        c_bulk, R, rho_co2, v, dr_list = bubbleflow.num_fix_D(eps_params, \
+        c_bulk, R, rho_co2, v, dr_list = bubbleflow.num_fix_D(t_nuc, eps_params, \
                                                     R_max, N, dt_max=dt_max)
 
         # uses 2nd-order Taylor stencil
