@@ -289,123 +289,6 @@ def num_fix_D(eps_params, R_max, N, adaptive_dt=True,
                 rho_co2, v, dr_list
 
 
-# def num_fix_D_nonuniform(eps_params, R_max, N, adaptive_dt=True,
-#                      if_tension_model='lin', implicit=False, d_tolman=0,
-#                      tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
-#                      R_min=0, dcdt_fn=diffn.calc_dcdt_sph_fix_D_nonuniform,
-#                      time_step_fn=bubble.time_step_dcdr):
-#     """
-#     Performs numerical computation of Epstein-Plesset model for comparison to
-#     semi-numerical model.
-#     Same as num_fix_D(), but uses a logarithmically spaced grid with spacing
-#     dr, dr, 2dr, 4dr, etc., leading to a grid of 0, dr, 2dr, 4dr, 8dr, etc.
-#
-#     Parameters
-#     ----------
-#     eps_params : 9-tuple
-#         Positional parameters for bubble.grow() Epstein-Plesset model
-#     R_max : float
-#         Maximum value of radius in grid [m]
-#     dr : float
-#         smallest grid spacing
-#
-#     Return
-#     ------
-#     t_flow : list of floats
-#         times at which concentration in flow was evaluated [s]
-#     c : list of lists of floats
-#         list of concentrations at each grid point for each time point in t_flow
-#         [kg/m^3]
-#     t_bub : list of floats
-#         times at which the bubble growth was evaluated [s]
-#     m : list of floats
-#         mass of CO2 in bubble at each time in t_bub [kg]
-#     D : float
-#         diffusivity [m^2/s]
-#     p : list of floats
-#         pressure in channel at each time point in t_bub [Pa]
-#     p_bub : list of floats
-#         pressure inside bubble at each time point in t_bub (includes Laplace
-#         pressure) [Pa]
-#     if_tension : list of floats
-#         interfacial tension at interface of bubble at each time point in t_bub
-#         [N/m]
-#     c_bub : list of floats
-#         concentration of CO2 at surface of bubble at each time point in t_bub
-#         [kg/m^3]
-#     c_bulk : float
-#         concentration of CO2 in the bulk liquid [kg/m^3]
-#     R : list of floats
-#         radius of bubble at each time point in t_bub [m]
-#     rho_co2 : list of floats
-#         density of CO2 inside the bubble at each time point in t_bub [kg/m^3]
-#     v : float
-#         maximum velocity of inner stream assuming Poiseuille flow [m/s]
-#     dr_list : list of floats
-#         grid spacing at each time in t_flow [m]
-#     """
-#     # extracts parameters used in Epstein-Plesset model
-#     dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
-#     # INITIALIZES BUBBLE PARAMETERS
-#     t_bub, m, D, p, p_bub, if_tension, c_bub, \
-#     c_bulk, R, rho_co2, _, fixed_params_tmp = bubble.init(p_in, p_s, t_nuc,
-#                                             R_nuc, v, L, D, polyol_data_file,
-#                                             eos_co2_file, if_tension_model,
-#                                             d_tolman, implicit)
-#     # extracts relevant parameters from bubble initiation
-#     _, D, p_in, p_s, v, L, _, c_s_interp_arrs, \
-#     if_interp_arrs, f_rho_co2, d_tolman, _ = fixed_params_tmp
-#     # collects parameters relevant for bubble growth
-#     fixed_params_bub = (D, p_in, p_s, v, L, c_s_interp_arrs, if_interp_arrs,
-#                         f_rho_co2, d_tolman)
-#
-#     # INITIALIZES PARAMETERS FOR DIFFUSION IN BULK
-#     # starts at nucleation time since we do not consider diffusion before bubble
-#     t_flow = [t_nuc]
-#     r_arr = diffn.make_r_arr_log(N, R_max)
-#     dr_list = [r_arr[1] - r_arr[0]]
-#     # number of grid spacings is one fewer than the number of mesh points
-#     c = [c_bulk*np.ones(N+1)]
-#
-#     # final time of model [s]
-#     t_f = L/v
-#
-#     # TIME STEPPING -- BUBBLE NUCLEATES AND GROWS
-#     while t_bub[-1] <= t_f:
-#         # collects parameters for bubble growth
-#         time_step_params = (t_bub[-1], m[-1], if_tension[-1], R[-1],
-#                                 rho_co2[-1], r_arr, c[-1], fixed_params_bub)
-#         # BUBBLE GROWTH
-#         if adaptive_dt:
-#             dt, props_bub = bubble.adaptive_time_step(dt, time_step_params,
-#                                                     time_step_fn, tol_R, alpha,
-#                                                     dt_max=dt_max)
-#         else:
-#             # calculates properties after one time step
-#             props_bub = time_step_fn(dt, *time_step_params)
-#
-#         # updates properties of bubble at new time step
-#         bubble.update_props(props_bub, t_bub, m, p, p_bub, if_tension, c_bub, R,
-#                             rho_co2)
-#
-#         # SHEATH FLOW
-#         # calculates properties after one time step with updated
-#         # boundary conditions
-#         # adds bubble radius R to grid of radii since r_arr starts at bubble
-#         # interface
-#         # for now, uses same grid spacing for each time step
-#         dr_list += [dr_list[-1]]
-#         # computes time step
-#         fixed_params_flow = (D, R[-1])
-#         props_flow = diffn.time_step(dt, t_flow[-1], r_arr, c[-1], dcdt_fn,
-#                         bc_bub_cap(c_bub[-1], c_max=c_bulk), fixed_params_flow)
-#         # stores properties at new time step in lists
-#         diffn.update_props(props_flow, t_flow, c)
-#
-#     return t_flow, c, t_bub, m, D, p, p_bub, if_tension, c_bub, c_bulk, R, \
-#                 rho_co2, v, dr_list
-
-
 def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
                  dt_max=None, D_fn=polyco2.calc_D_lin,
                  half_grid=False, pts_per_grad=5, adaptive_dt=True,
@@ -416,6 +299,10 @@ def num_vary_D(eps_params, R_max, N, dc_c_s_frac,
     """
     Peforms numerical computation of diffusion into bubble from bulk accounting
     for effect of concentration of CO2 on the local diffusivity D.
+
+    Has a feature allowing the user to "halve" the grid (decimating every other
+    point) to speed up computation as the diffusion boundary layer widens.
+    Simply set the optional parameter "half_grid" to True.
     """
     # extracts parameters used in Epstein-Plesset model
     dt, t_nuc, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
