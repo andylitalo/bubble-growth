@@ -160,7 +160,8 @@ def grow(t_nuc, dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file,
     return t, m, D, p, p_bub, if_tension, c_s, c_bulk, R, rho_co2
 
 
-def adaptive_time_step(dt, time_step_params, time_step_fn, tol_R, alpha, dt_max=None):
+def adaptive_time_step(dt, time_step_params, time_step_fn, tol_R, alpha,
+                        dt_max=None):
     """
     Previously incremented time step by alpha after taking the appropriate time
     step, but then the returned time step was larger than the time step taken.
@@ -174,6 +175,8 @@ def adaptive_time_step(dt, time_step_params, time_step_fn, tol_R, alpha, dt_max=
     # tolerance
     while True:
         # calculates properties for two time steps
+        # TODO: should I perform two time steps of dt to compare to one time
+        # step of 2*dt?
         props_a = time_step_fn(dt, *time_step_params)
         props_b = time_step_fn(2*dt, *time_step_params)
         # extracts estimated value of the radius (index -2 in properties list)

@@ -105,8 +105,6 @@ def calc_dcdr_eps_fix_D(N_list, R_max, t_nuc, eps_params, dt_max_list=None):
     Calculates concentration gradient at interface of bubble b/w Epstein-Plesset
     model and numerical model.
     """
-    # extracts parameters used in Epstein-Plesset model
-    dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
     # initializes list of numerically computed concentration gradients
     dcdr_num_list = []
     # initializes list of times [s]
@@ -114,8 +112,7 @@ def calc_dcdr_eps_fix_D(N_list, R_max, t_nuc, eps_params, dt_max_list=None):
 
     # first performs Epstein-Plesset computation as benchmark
     t_eps, m, D, p, p_bub, if_tension,\
-    c_s, c_bulk, R, rho_co2 = bubble.grow(dt, t_nuc, p_s, R_nuc, L,
-                                        p_in, v, polyol_data_file, eos_co2_file)
+    c_s, c_bulk, R, rho_co2 = bubble.grow(t_nuc, *eps_params)
     # computes concentration gradient at bubble interface
     dcdr_eps = bubble.calc_dcdr_eps(c_bulk, c_s, R, D, np.asarray(t_eps) - t_nuc)
 
@@ -126,8 +123,7 @@ def calc_dcdr_eps_fix_D(N_list, R_max, t_nuc, eps_params, dt_max_list=None):
         else:
             dt_max = None
         # performs simulation
-        eps_params = (dt, p_s, R_nuc, L, p_in, v, polyol_data_file, \
-                        eos_co2_file)
+
         t_flow, c, t_num, m, D, p, \
         p_bub, if_tension, c_bub, \
         c_bulk, R, rho_co2, v, dr_list = bubbleflow.num_fix_D(t_nuc, eps_params, \
@@ -195,7 +191,7 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
     output = growth_fn(*tuple(args))
     t = output[i_t]
     R = output[i_R]
-    
+
         # finds index of timeline corresponding to measurement of bubble size
     i_bubble = next(i for i in range(len(t)) if t[i] >= t_bubble)
     R_bubble_pred = R[i_bubble]

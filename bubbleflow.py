@@ -172,6 +172,9 @@ def manage_grid_halving(r_arr, c, c_bulk, dt_max, pts_per_grad):
     Manages halving of grid by checking if the gradient is resolved by a
     sufficient number of grid points and, if not, halving the grid (decimating
     every other point) and adjusting the maximum time step accordingly.
+
+    Note: the last array in the list of concentrations "c" is decimated in
+    place.
     """
     dr = r_arr[1] - r_arr[0]
     if 2*pts_per_grad < len(r_arr):
@@ -251,6 +254,10 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True, half_grid=False,
         maximum velocity of inner stream assuming Poiseuille flow [m/s]
     dr_list : list of floats
         grid spacing at each time in t_flow [m]
+
+    See Also
+    --------
+    num_vary_D : same but allows D to vary with concentration D(c)
     """
     # extracts parameters used in Epstein-Plesset model
     dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
@@ -304,7 +311,8 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True, half_grid=False,
         dr = r_arr[1] - r_arr[0]
         if half_grid:
             r_arr, dr, dt_max = manage_grid_halving(r_arr, c, c_bulk, dt_max, pts_per_grad)
-
+            # retroactively updates dr list in case grid was halved
+            dr_list[-1] = dr
         # stores grid spacing
         dr_list += [dr]
 
@@ -361,9 +369,9 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
     if_interp_arrs, f_rho_co2, d_tolman, _ = fixed_params_tmp
 
     # initializes list of diffusivities
-    D = []
+    D = [D]
     # initializes list of grid spacings [m]
-    dr_list = [r_arr[1]-r_arr[0]]
+    dr_list = [r_arr[1] - r_arr[0]]
 
     # TIME-STEPPING -- BUBBLE NUCLEATES AND GROWS
     while t_bub[-1] <= t_f:
@@ -392,6 +400,8 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
         dr = r_arr[1] - r_arr[0]
         if half_grid:
             r_arr, dr, dt_max = manage_grid_halving(r_arr, c, c_bulk, dt_max, pts_per_grad)
+            # retroactively updates dr list in case grid was halved
+            dr_list[-1] = dr
         # stores grid spacing
         dr_list += [dr]
         # calculates properties after one time step with updated
@@ -447,7 +457,7 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i, dt_shea
     # initializes boundary conditions for sheath flow (no bubble)
     bc_specs_list = bc_cap(c_max=c_wall)
     # initializes list of diffusivities
-    D = []
+    D = [D]
     # initializes list of grid spacings [m]
     dr_list = [r_arr[1]-r_arr[0]]
     dr = dr_list[-1]
@@ -495,7 +505,8 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i, dt_shea
             dr = r_arr[1] - r_arr[0]
             if half_grid:
                 r_arr, dr, dt_max = manage_grid_halving(r_arr, c, c_bulk, dt_max, pts_per_grad)
-
+                # retroactively updates dr list in case grid was halved
+                dr_list[-1] = dr
         ######### SHEATH FLOW #############
         # if the next time step will surpass the nucleation time for the first
         # time, shorten it so it exactly reaches the nucleation time

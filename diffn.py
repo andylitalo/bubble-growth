@@ -366,6 +366,37 @@ def calc_dcdt_sph_fix_D_transf(xi_arr, c_arr, fixed_params):
     return dcdt
 
 
+def fixed_D(a):
+    """Fixes diffusivity for comparison to num_fix_D()"""
+    return 2.3497250000000002e-08
+
+
+def D_of_c(c, p_or_dp, filepath_D_c='../g-adsa_results/D_c_power_law.csv'):
+    """
+    Power-law fit for D(c) fitted either pressurization ('p') or
+    depressurization ('dp') data of 1k3f @ 30c
+    (see 20201124_1k3f_D_vs_rho_co2.ipynb).
+    """
+    df_D = pd.read_csv(filepath_D_c)
+    D0, A, k = df_D[p_or_dp]
+
+    return D0 + A * c**k
+
+def D_p(c):
+    """
+    Power-law fit for D(c) fitted to *pressurization* data of 1k3f @ 30c
+    (see 20201124_1k3f_D_vs_rho_co2.ipynb).
+    """
+    return D_of_c(c, 'p')
+
+def D_dp(c):
+    """
+    Power-law fit for D(c) fitted to *depressurization* data of 1k3f @ 30c (see
+    20201124_1k3f_D_vs_rho_co2.ipynb).
+    """
+    return D_of_c(c, 'dp')
+
+
 def go(dt, t_f, R_min, R_o, N, c_0, dcdt_fn, bc_specs_list,
         eta_i, eta_o, d, L, Q_i, Q_o, p_s, dc_c_s_frac, polyol_data_file):
     """
