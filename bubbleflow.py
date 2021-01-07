@@ -177,16 +177,20 @@ def manage_grid_halving(r_arr, c, c_bulk, dt_max, pts_per_grad):
     place.
     """
     dr = r_arr[1] - r_arr[0]
+    # only considers halving if array will be long enough after
     if 2*pts_per_grad < len(r_arr):
         dcdr = (c[-1][1]-c[-1][0]) / dr
         # width of region with desired number of points for gradient after halving
         delta_r = r_arr[2*pts_per_grad] - r_arr[0]
         # difference between minimum and maximum concentrations
-        delta_c = c_bulk# - c[-1][0]
+        delta_c = c_bulk - c[-1][0]
         # halves grid if gradient has enough mesh points
         if dcdr*delta_r < delta_c:
             r_arr = halve_grid(r_arr)
             c[-1] = halve_grid(c[-1])
+            print(dcdr)
+            print(delta_r)
+            print(delta_c)
             dr_new = r_arr[1] - r_arr[0]
             # quadruples maximum time step since limit on time step is
             # proportional to spatial resolution squared
@@ -334,7 +338,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True, half_grid=False,
 
 def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
                  dt_max=None, D_fn=polyco2.calc_D_lin,
-                 half_grid=False, pts_per_grad=10, adaptive_dt=True,
+                 half_grid=False, pts_per_grad=5, adaptive_dt=True,
                  if_tension_model='lin', implicit=False, d_tolman=0,
                  tol_R=0.001, alpha=0.3, D=-1, R_i=np.inf,
                  R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
