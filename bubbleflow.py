@@ -507,6 +507,7 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i, dt_shea
                 r_arr, dr, dt_sheath = manage_grid_halving(r_arr, c, c_bulk, dt_sheath, pts_per_grad)
                 # retroactively updates dr list in case grid was halved
                 dr_list[-1] = dr
+            dr_list += [dr]
         ######### SHEATH FLOW #############
         # if the next time step will surpass the nucleation time for the first
         # time, shorten it so it exactly reaches the nucleation time
