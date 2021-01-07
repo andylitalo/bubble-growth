@@ -1,11 +1,11 @@
-"""
-@bubbleflow.py contains functions for modeling bubble growth during flow
-through the sheath flow in the microfluidic channel. It combines functions from
-bubble.py for bubble growth and diffn.py for diffusion in the bulk fluid to
-provide a more complete model of each phenomenon and their interaction.
+"""Contains functions for modeling bubble growth during sheath flow.
 
-@date November 24, 2020
-@author Andy Ylitalo
+It combines functions from bubble.py for bubble growth and diffn.py for
+diffusion in the bulk fluid to provide a more complete model of each phenomenon
+and their interaction.
+
+Date created : November 24, 2020
+Author : Andy Ylitalo
 """
 # adds path to general libraries
 import sys
@@ -29,14 +29,14 @@ from conversions import *
 
 
 def grow(dt_sheath, dt, dcdt_fn, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s,
-         dc_c_s_frac, t_nuc, R_nuc, polyol_data_file, eos_co2_file, bc_specs_list,
-         if_tension_model='lin', d_tolman=0, adaptive_dt=True, implicit=False,
-         tol_R=0.001, alpha=0.3, drop_t_term=False, R_min=0, D=-1,
-         i_c_bulk=7):
+         dc_c_s_frac, t_nuc, R_nuc, polyol_data_file, eos_co2_file,
+         bc_specs_list, if_tension_model='lin', d_tolman=0, adaptive_dt=True,
+         implicit=False, tol_R=0.001, alpha=0.3, drop_t_term=False, R_min=0,
+         D=-1, i_c_bulk=7):
     """
     Grows bubble based on combined diffusion model of bulk and bubble interface.
 
-    ASSUMPTIONS
+    Assumes:
     -Bubble "consumes" polyol as it grows, so its growth does not directly
     affect the CO2 concentration profile
 
@@ -51,6 +51,20 @@ def grow(dt_sheath, dt, dcdt_fn, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s,
         point on the grid, dc/dt(r) [kg/m^3 / s]
     R_o : float
         Outer stream radius [m]
+    N : int
+        number of mesh elements in grid (so number of mesh points is N+1)
+    eta_i, eta_o : float
+        viscosity of (inner)/(outer) stream [Pa.s]
+    d : float
+        distance downstream from entrance to observation capillary [m]
+    L : float
+        length of observation capillary [m]
+    Q_i, Q_o : float
+        flow rate of (inner)/(outer) stream [uL/min]
+    p_s : float
+        saturation pressure of CO2 in polyol [Pa]
+    dc_c_s_frac : float
+        
     """
     # initializes parameters for CO2 diffusion in sheath flow
     # uses t_f = d/v the final time is the distance to which to perform the
@@ -188,9 +202,6 @@ def manage_grid_halving(r_arr, c, c_bulk, dt_max, pts_per_grad):
         if dcdr*delta_r < delta_c:
             r_arr = halve_grid(r_arr)
             c[-1] = halve_grid(c[-1])
-            print(dcdr)
-            print(delta_r)
-            print(delta_c)
             dr_new = r_arr[1] - r_arr[0]
             # quadruples maximum time step since limit on time step is
             # proportional to spatial resolution squared
