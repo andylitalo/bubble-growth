@@ -504,7 +504,7 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i, dt_shea
             # if resolution of concentration gradient is sufficient
             dr = r_arr[1] - r_arr[0]
             if half_grid:
-                r_arr, dr, dt_max = manage_grid_halving(r_arr, c, c_bulk, dt_max, pts_per_grad)
+                r_arr, dr, dt_sheath = manage_grid_halving(r_arr, c, c_bulk, dt_sheath, pts_per_grad)
                 # retroactively updates dr list in case grid was halved
                 dr_list[-1] = dr
         ######### SHEATH FLOW #############

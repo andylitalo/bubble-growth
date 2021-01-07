@@ -4,3 +4,5 @@
 
 IMPROVING BUBBLEFLOW.NUMERICAL_EPS_PLESS_FIX_D()
 -More precise computation of dc/dr by having a logarithmically spaced mesh (this will require rewriting all of the finite difference formulas)
+
+20201124_diffn_matching.ipynb was broken up into diffn_model_task#.ipynb, for tasks 1, 1a, 2, and 3.
