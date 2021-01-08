@@ -64,7 +64,7 @@ def grow(dt_sheath, dt, dcdt_fn, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s,
     p_s : float
         saturation pressure of CO2 in polyol [Pa]
     dc_c_s_frac : float
-        
+
     """
     # initializes parameters for CO2 diffusion in sheath flow
     # uses t_f = d/v the final time is the distance to which to perform the
@@ -217,7 +217,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True, half_grid=False,
                     d_tolman=0, tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
                     R_min=0, dcdt_fn=diffn.calc_dcdt_sph_fix_D,
                     time_step_fn=bubble.time_step_dcdr,
-                    grid_fn=diffn.make_r_arr_lin):
+                    grid_fn=diffn.make_r_arr_lin, adapt_freq=1):
     """
     Performs numerical computation of Epstein-Plesset model for comparison.
     Once confirmed to provide accurate estimation of Epstein-Plesset result,
@@ -308,7 +308,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True, half_grid=False,
         time_step_params = (t_bub[-1], m[-1], if_tension[-1], R[-1],
                                 rho_co2[-1], r_arr, c[-1], fixed_params_bub)
         # BUBBLE GROWTH
-        if adaptive_dt:
+        if adaptive_dt and (len(t_bub)%adapt_freq == 0):
             dt, props_bub = bubble.adaptive_time_step(dt, time_step_params,
                                                     time_step_fn, tol_R, alpha,
                                                     dt_max=dt_max)

@@ -144,6 +144,12 @@ def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
     Follow up to compare_dcdr(). Compares the predicted radius of the bubble
     under different numerical schemes to a reference (typically the Epstein-
     Plesset model).
+
+    Parameters
+    ----------
+    num_input_list : list
+        Entries can be tuples or dictionaries of arguments for the corresponding
+        function in num_fn_list or dictionar
     """
     # initializes list of fractional differences in dc/dr from reference
     R_diff_list = []
@@ -154,7 +160,13 @@ def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
     # computes dc/dr for numerical functions
     for input, fn in zip(num_input_list, num_fn_list):
         print('Computing {0:s}'.format(str(fn)))
-        output = fn(*input)
+        # extracts results if input is provided as a dictionary
+        if isinstance(input, dict):
+            output = fn(**input)
+        # extracts results if input is provided as a tuple
+        else:
+            output = fn(*input)
+        # extracts relevant variables from the output
         R = output[i_R]
         t_num = output[i_t_num]
         dr_list = output[i_dr]
