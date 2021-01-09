@@ -12,6 +12,7 @@ sys.path.append('../libs/')
 
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 
 # imports custom libraries
 import bubble
@@ -160,6 +161,7 @@ def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
     # computes dc/dr for numerical functions
     for input, fn in zip(num_input_list, num_fn_list):
         print('Computing {0:s}'.format(str(fn)))
+        start_time = time.time()
         # extracts results if input is provided as a dictionary
         if isinstance(input, dict):
             output = fn(**input)
@@ -178,6 +180,8 @@ def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
         dr_list_list += [dr_list]
         t_num_list += [t_num]
         raw_vals_list += [raw_vals]
+
+        print('Computation time = {0:f} s.'.format(time.time() - start_time))
 
     return R_diff_list, dr_list_list, raw_vals_list
 

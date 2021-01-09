@@ -189,6 +189,7 @@ def calc_dcdt_sph_fix_D_nonuniform(xi_arr, c_arr, fixed_params):
     """
     Computes the time derivative of concentration dc/dt in spherical
     coordinates assuming concentration dependent diffusivity constant.
+    ***Allows for a grid with nonuniform spacing.***
 
     In spherical coordinates Fick's law of dc/dt = div(D(c)grad(c)) becomes:
 
@@ -224,23 +225,11 @@ def calc_dcdt_sph_fix_D_nonuniform(xi_arr, c_arr, fixed_params):
     r_arr_c = r_arr[1:-1]
 
     # FIRST TERM: 2/r * D(c) * dc/dr
-    # computes spatial derivative of concentration dc/dr with central difference
-    # see eqn 2.20 from Parviz Moin's "Fundamentals of Engineering Numerical
-    # Analysis" (p. 23)
-    dcdr_arr = (c_arr[2:] - c_arr[:-2]) / (r_arr[2:] - r_arr[:-2])
+    dcdr_arr = fd.dydx_non_1st(c_arr, r_arr)
     term1 = 2/r_arr_c * D * dcdr_arr
 
     # SECOND TERM: D(c) * d2c/dr2
-    # computes second spatial derivative of concentration with formula for
-    # non uniform grids in eqn 2.21 from Parviz Moin's "Fundamentals of
-    # Engineering Numerical Analysis" (p. 23)
-    c0 = c_arr[:-2]
-    c1 = c_arr[1:-1]
-    c2 = c_arr[2:]
-    h1 = r_arr[1:-1] - r_arr[:-2]
-    h2 = r_arr[2:] - r_arr[1:-1]
-
-    d2cdr2_arr = 2*( c0 / (h1*(h1+h2)) - c1/(h1*h2) + c2/(h2*(h1+h2)) )
+    d2cdr2_arr = fd.d2ydx2_non_1st(c_arr, r_arr)
     term2 = D * d2cdr2_arr
 
     dcdt = term1 + term2

@@ -70,7 +70,8 @@ def time_step(dt, t_prev, m_prev, p_prev, if_tension_prev, R_prev, rho_co2_prev,
 
 def grow(t_nuc, dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file,
          adaptive_dt=True, if_tension_model='lin', implicit=False, d_tolman=0,
-         tol_R=0.001, alpha=0.3, D=-1, drop_t_term=False, time_step_fn=time_step):
+         tol_R=0.001, alpha=0.3, D=-1, drop_t_term=False, time_step_fn=time_step,
+         dt_max=None):
     """
     Solves for bubble growth based on Epstein and Plesset (1950) with
     modifications for changing pressure (p) and interfacial tension (if_tension).
@@ -149,7 +150,8 @@ def grow(t_nuc, dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file,
                                     if_tension[-1], R[-1], rho_co2[-1],
                                     fixed_params, drop_t_term)
         if adaptive_dt:
-            dt, props = adaptive_time_step(dt, time_step_params, time_step_fn, tol_R, alpha)
+            dt, props = adaptive_time_step(dt, time_step_params, time_step_fn,
+                                            tol_R, alpha, dt_max=dt_max)
         else:
             # calculates properties after one time step
             props = time_step_fn(dt, *time_step_params)
@@ -161,10 +163,18 @@ def grow(t_nuc, dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file,
 
 
 def adaptive_time_step(dt, time_step_params, time_step_fn, tol_R, alpha,
-                        dt_max=None):
+                        dt_max=None, i_R=-2, legacy_mode=False):
     """
     Previously incremented time step by alpha after taking the appropriate time
     step, but then the returned time step was larger than the time step taken.
+
+    legacy_mode : bool
+        Before January 9, 2021, all calls of adaptive_time_step() used a poorly
+        designed adaptive rule, comparing the result of ONE step of dt to one
+        step of 2*dt. If legacy_mode is True, this adaptive rule will be used.
+        Otherwise, the intended adaptive rule will be used: compare the result
+        of TWO steps of dt to one step of 2*dt. This is faster and at least as
+        accurate according to preliminary comparisons (diffn_model_task1a.ipynb)
     """
     # time step is increased to speed up calculation if remains below maximum
     if (dt_max is None) or (dt*(1+alpha) < dt_max):
@@ -178,10 +188,24 @@ def adaptive_time_step(dt, time_step_params, time_step_fn, tol_R, alpha,
         # TODO: should I perform two time steps of dt to compare to one time
         # step of 2*dt?
         props_a = time_step_fn(dt, *time_step_params)
+
+        ########################################################################
+        if not legacy_mode:
+            # TODO make this generalizable to other time_step_fn()
+            # takes a second step
+            t_prev, m_prev, if_tension_prev, R_prev, \
+            rho_co2_prev, r_arr, c_arr, fixed_params = time_step_params
+            dt, t, m, p, p_bub, if_tension, c_s, R, rho_co2 = props_a
+            len(c_arr)
+            props_a = time_step_fn(dt, t, m, if_tension, R, \
+                                    rho_co2, r_arr, c_arr, fixed_params)
+        ########################################################################
+
+        # compares to one step twice as large
         props_b = time_step_fn(2*dt, *time_step_params)
         # extracts estimated value of the radius (index -2 in properties list)
-        R_a = props_a[-2]
-        R_b = props_b[-2]
+        R_a = props_a[i_R]
+        R_b = props_b[i_R]
         # checks if the discrepancy in the radius is below tolerance
         if np.abs( (R_a - R_b) / R_a) <= tol_R:
             # takes properties calculated with smaller time step
@@ -640,6 +664,49 @@ def time_step_dcdr(dt, t_prev, m_prev, if_tension_prev, R_prev,
     rho_co2 = f_rho_co2(p_bub) # [kg/m^3]
 
     return dt, t, m, p, p_bub, if_tension, c_s, R, rho_co2
+
+
+def time_step_dcdr_rev(dt, inputs, fixed_params):
+    """
+    Advances system forward by one time step using dc/dr direct calculation.
+    This only considers the concentration at the surface of the bubble, so it
+    assumes constant diffusivity whether it varies with concentration or not.
+
+    Consecutive usage:
+        dt, updated_inputs, new_outputs = time_step_dcdr_rev(dt, inputs,
+                                                                fixed_params)
+        dt, updated_inputs, new_outputs = time_step_dcdr_rev(dt, updated_inputs,
+                                                                fixed_params)
+
+    """
+    t_prev, m_prev, if_tension_prev, R_prev, rho_co2_prev, r_arr, c_arr = inputs
+    # some of the fixed parameters needed for time_step() are not required here
+    D, p_in, p_s, v, L, c_s_interp_arrs, \
+    if_interp_arrs, f_rho_co2, d_tolman = fixed_params
+    t = t_prev + dt # increments time forward [s]
+    p = flow.calc_p(p_in, P_ATM, v, t, L) # computes new pressure along observation capillary [Pa]
+    c_s = np.interp(p, *c_s_interp_arrs) # interpolates saturation concentration of CO2 [kg CO2 / m^3 polyol-CO2]
+    # guess for self-consistently solving for radius and pressure of bubble
+    R0 = (3/(4*np.pi)*m_prev/rho_co2_prev)**(1./3) #p[-1] + 2*if_tension[-1]/R0
+    p_bub0 = p + 2*if_tension_prev/R0 #p_bub[-1]
+
+    # updates mass with explicit Euler method--inputs are i^th terms,
+    # so we pass in R[-1] since R has not been updated to R_{i+1} yet
+    m = m_prev + dt*calc_dmdt_dcdr_fix_D(r_arr, c_arr, R_prev, D)
+    # self-consistently solves for radius and pressure of bubble
+    R, p_bub = calc_R_p_bub(m, p, R0, p_bub0, if_interp_arrs,
+                                  f_rho_co2, d_tolman)
+
+    if_tension = polyco2.calc_if_tension(p_bub, if_interp_arrs, R, d_tolman=d_tolman) # [N/m]]
+    rho_co2 = f_rho_co2(p_bub) # [kg/m^3]
+
+    # groups outputs into updated values of the inputs (except for dt, which
+    # is passed separately to allow it to be adjusted)
+    updated_inputs = (t, m, if_tension, R, rho_co2, r_arr, c_arr)
+    # and newly calculated alues
+    new_outputs = (p, p_bub, c_s)
+
+    return dt, updated_inputs, new_outputs
 
 
 def update_props(props, t, m, p, p_bub, if_tension, c_s, R, rho_co2):
