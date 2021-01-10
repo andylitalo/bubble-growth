@@ -15,6 +15,7 @@ sys.path.append('../libs/')
 # imports standard libraries
 import numpy as np
 import pandas as pd
+import finitediff as fd
 
 # imports custom libraries
 import polyco2

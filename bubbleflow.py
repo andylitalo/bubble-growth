@@ -305,20 +305,23 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True, half_grid=False,
     # TIME STEPPING -- BUBBLE NUCLEATES AND GROWS
     while t_bub[-1] <= t_f:
         # collects parameters for bubble growth
-        time_step_params = (t_bub[-1], m[-1], if_tension[-1], R[-1],
-                                rho_co2[-1], r_arr, c[-1], fixed_params_bub)
+        args_bub = (r_arr, c[-1], *fixed_params_bub)
+        inputs_bub = (t_bub[-1], m[-1], if_tension[-1], R[-1],
+                                rho_co2[-1])
         # BUBBLE GROWTH
         if adaptive_dt and (len(t_bub)%adapt_freq == 0):
-            dt, props_bub = bubble.adaptive_time_step(dt, time_step_params,
+            dt, updated_inputs_bub, outputs_bub = bubble.adaptive_time_step(dt,
+                                                    inputs_bub, args_bub,
                                                     time_step_fn, tol_R, alpha,
                                                     dt_max=dt_max)
         else:
             # calculates properties after one time step
-            props_bub = time_step_fn(dt, *time_step_params)
+            updated_inputs_bub, outputs_bub = time_step_fn(dt, inputs_bub, args_bub)
 
         # updates properties of bubble at new time step
-        bubble.update_props(props_bub, t_bub, m, p, p_bub, if_tension, c_bub, R,
-                            rho_co2)
+        props_bub = (*updated_inputs_bub, *outputs_bub)
+        props_lists_bub = [t_bub, m, if_tension, R, rho_co2, p, p_bub, c_bub]
+        bubble.update_props(props_bub, props_lists_bub)
 
         ######### SHEATH FLOW #############
         # first considers coarsening the grid by half if resolution of
