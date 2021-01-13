@@ -216,7 +216,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True, half_grid=False,
                     pts_per_grad=10, if_tension_model='lin', implicit=False,
                     d_tolman=0, tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
                     R_min=0, dcdt_fn=diffn.calc_dcdt_sph_fix_D,
-                    time_step_fn=bubble.time_step_dcdr, legacy_mode=True,
+                    time_step_fn=bubble.time_step_dcdr, legacy_mode=False,
                     grid_fn=diffn.make_r_arr_lin, grid_params={}, adapt_freq=5):
     """
     Performs numerical computation of Epstein-Plesset model for comparison.
