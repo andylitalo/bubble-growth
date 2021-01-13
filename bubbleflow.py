@@ -216,8 +216,8 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True, half_grid=False,
                     pts_per_grad=10, if_tension_model='lin', implicit=False,
                     d_tolman=0, tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
                     R_min=0, dcdt_fn=diffn.calc_dcdt_sph_fix_D,
-                    time_step_fn=bubble.time_step_dcdr,
-                    grid_fn=diffn.make_r_arr_lin, grid_params={}, adapt_freq=1):
+                    time_step_fn=bubble.time_step_dcdr, legacy_mode=True,
+                    grid_fn=diffn.make_r_arr_lin, grid_params={}, adapt_freq=5):
     """
     Performs numerical computation of Epstein-Plesset model for comparison.
     Once confirmed to provide accurate estimation of Epstein-Plesset result,
@@ -313,7 +313,8 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True, half_grid=False,
             dt, updated_inputs_bub, outputs_bub = bubble.adaptive_time_step(dt,
                                                     inputs_bub, args_bub,
                                                     time_step_fn, tol_R, alpha,
-                                                    dt_max=dt_max)
+                                                    dt_max=dt_max,
+                                                    legacy_mode=legacy_mode)
         else:
             # calculates properties after one time step
             updated_inputs_bub, outputs_bub = time_step_fn(dt, inputs_bub, args_bub)
