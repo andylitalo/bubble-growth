@@ -57,7 +57,14 @@ def compare_dcdr(num_input_list, num_fn_list, t_ref, dcdr_ref,
     # computes dc/dr for numerical functions
     for input, fn in zip(num_input_list, num_fn_list):
         print('Computing {0:s}'.format(str(fn)))
-        output = fn(*input)
+        start_time = time.time()
+        # extracts results if input is provided as a dictionary
+        if isinstance(input, dict):
+            output = fn(**input)
+        # extracts results if input is provided as a tuple
+        else:
+            output = fn(*input)
+
         t_flow = output[i_t_flow]
         c = output[i_c]
         t_num = output[i_t_num]
