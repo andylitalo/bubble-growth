@@ -217,7 +217,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True, half_grid=False,
                     d_tolman=0, tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
                     R_min=0, dcdt_fn=diffn.calc_dcdt_sph_fix_D,
                     time_step_fn=bubble.time_step_dcdr,
-                    grid_fn=diffn.make_r_arr_lin, adapt_freq=1):
+                    grid_fn=diffn.make_r_arr_lin, grid_params={}, adapt_freq=1):
     """
     Performs numerical computation of Epstein-Plesset model for comparison.
     Once confirmed to provide accurate estimation of Epstein-Plesset result,
@@ -293,7 +293,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True, half_grid=False,
     # starts at nucleation time since we do not consider diffusion before bubble
     t_flow = [t_nuc]
     # creates mesh grid
-    r_arr = grid_fn(N, R_max)
+    r_arr = grid_fn(N, R_max, **grid_params)
     # initializes list of the mesh spacing at the bubble interface
     dr_list = [r_arr[1] - r_arr[0]]
     # initializes concentration profile as uniformly bulk concentration [kg/m^3]

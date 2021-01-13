@@ -190,8 +190,6 @@ def adaptive_time_step(dt, inputs, args, time_step_fn, tol_R,
     # tolerance
     while True:
         # calculates properties for two time steps
-        # TODO: should I perform two time steps of dt to compare to one time
-        # step of 2*dt?
         updated_inputs_a, outputs_a = time_step_fn(dt, inputs, args)
         if not legacy_mode:
             # takes a second step of dt

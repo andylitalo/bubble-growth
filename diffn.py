@@ -489,9 +489,15 @@ def make_r_arr_log(N, R_max, k=1.5, R_min=0):
     """
     # number of points in grid is log_k(delta_R). Use log formula for different
     # log bases
-    d = (R_max - R_min) / (k**N - 1)
-    z = np.arange(0, N+1)
-    r_arr = (k**z - 1)*d
+    if k == 1:
+        r_arr = make_r_arr_lin(N, R_max, R_min=R_min)
+    elif k < 1:
+        print('k must be at least 1 in make_r_arr_log()')
+        r_arr = None 
+    else:
+        d = (R_max - R_min) / (k**N - 1)
+        z = np.arange(0, N+1)
+        r_arr = (k**z - 1)*d
 
     return r_arr
 
