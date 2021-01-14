@@ -83,6 +83,8 @@ def compare_dcdr(num_input_list, num_fn_list, t_ref, dcdr_ref,
         t_flow_list += [t_flow]
         raw_vals_list += [raw_vals]
 
+        print('Computation time = {0:f} s.'.format(time.time() - start_time))
+
     return dcdr_diff_list, dr_list_list, t_flow_list, raw_vals_list
 
 
