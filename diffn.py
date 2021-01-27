@@ -496,8 +496,8 @@ def make_r_arr_log(N, R_max, k=1.6, R_min=0):
         r_arr = None
     else:
         d = (R_max - R_min) / (k**N - 1)
-        z = np.arange(0, N+1)
-        r_arr = (k**z - 1)*d
+        z = np.arange(0, N+1) # {0, 1,..., N}
+        r_arr = (k**z - 1)*d + R_min
 
     return r_arr
 
