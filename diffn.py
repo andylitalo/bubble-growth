@@ -15,11 +15,13 @@ sys.path.append('../libs/')
 # imports standard libraries
 import numpy as np
 import pandas as pd
-import finitediff as fd
+import scipy.optimize
 
 # imports custom libraries
 import polyco2
 import flow
+import finitediff as fd
+
 
 # conversions
 from conversions import *
@@ -497,13 +499,22 @@ def make_r_arr_log(N, R_max, k=1.6, R_min=0, dr=None):
     else:
         # computes d if not provided
         if dr is None:
-            dr = (R_max - R_min) / (k**N - 1)
+            dr = (R_max - R_min)*(k-1) / (k**N - 1)
         # if d provided, computes k from d
         else:
-            k = (1 + (R_max-R_min)/dr)**(1/N)
+            def f(k, N, R_max, R_min, dr):
+                return dr - (k-1)/(k**N-1)*(R_max-R_min)
+
+            args = (N, R_max, R_min, dr)
+            k = scipy.optimize.fsolve(f, k, args=args)[0]
+            # k = (1 + (R_max-R_min)/dr)**(1/N)
+
         # creates grid
         z = np.arange(0, N+1) # {0, 1,..., N}
-        r_arr = (k**z - 1)*dr + R_min
+        r_arr = (k**z-1)/(k-1)*dr + R_min
+        print(k)
+        print(r_arr[1] - r_arr[0])
+        print(r_arr[-1])
 
     return r_arr
 
