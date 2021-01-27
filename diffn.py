@@ -482,7 +482,7 @@ def make_r_arr_lin(N, R_max, R_min=0):
 
     return r_arr
 
-def make_r_arr_log(N, R_max, k=1.6, R_min=0):
+def make_r_arr_log(N, R_max, k=1.6, R_min=0, d=None):
     """
     Makes numpy array of the radius with logarithmic spacing,
     dr, dr, 2dr, 4dr, 8dr, etc. from R_min to R_max.
@@ -495,7 +495,13 @@ def make_r_arr_log(N, R_max, k=1.6, R_min=0):
         print('k must be at least 1 in make_r_arr_log()')
         r_arr = None
     else:
-        d = (R_max - R_min) / (k**N - 1)
+        # computes d if not provided
+        if d is None:
+            d = (R_max - R_min) / (k**N - 1)
+        # if d provided, computes k from d
+        else:
+            k = (1 + (R_max-R_min)/d)**(1/N)
+        # creates grid
         z = np.arange(0, N+1) # {0, 1,..., N}
         r_arr = (k**z - 1)*d + R_min
 
