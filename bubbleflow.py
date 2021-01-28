@@ -297,7 +297,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True, half_grid=False,
     # initializes list of the mesh spacing at the bubble interface
     dr_list = [r_arr[1] - r_arr[0]]
     # initializes concentration profile as uniformly bulk concentration [kg/m^3]
-    c = [c_bulk*np.ones(N+1)]
+    c = [c_bulk*np.ones(len(r_arr))]
 
     # final time of model [s]
     t_f = L/v

@@ -221,6 +221,7 @@ def calc_dcdt_sph_fix_D_nonuniform(xi_arr, c_arr, fixed_params):
         (the concentrations at the end points at i=0 and i=N+1 are computed by
         the boundary conditions)
     """
+    print(xi_arr)
     # extracts fixed parameters
     D, R = fixed_params
     r_arr = xi_arr + R
@@ -507,16 +508,31 @@ def make_r_arr_log(N, R_max, k=1.6, R_min=0, dr=None):
 
             args = (N, R_max, R_min, dr)
             k = scipy.optimize.fsolve(f, k, args=args)[0]
+            print(k)
             # k = (1 + (R_max-R_min)/dr)**(1/N)
 
         # creates grid
         z = np.arange(0, N+1) # {0, 1,..., N}
         r_arr = (k**z-1)/(k-1)*dr + R_min
-        print(k)
-        print(r_arr[1] - r_arr[0])
-        print(r_arr[-1])
 
     return r_arr
+
+
+def make_r_arr_log_res_end(N, R_max, end_pts, k=1.6, R_min=0, dr=None):
+    """
+    Same as make_r_arr_log() but adds more points to the last mesh element to
+    help resolve the end of the domain.
+
+    end_pts gives the number of uniformly spaced points that the last point will
+    be split into.
+    """
+    # creates logarithmically spaced array
+    r_arr_raw = make_r_arr_log(N, R_max, k=k, R_min=R_min, dr=dr)
+    # adds more points to the last mesh element
+    r_arr_end = np.linspace(r_arr_raw[-2], r_arr_raw[-1], end_pts)
+
+    return np.concatenate((r_arr_raw[:-1], r_arr_end))
+
 
 def make_r_arr_log2(N, R_max, R_min=0):
     """
