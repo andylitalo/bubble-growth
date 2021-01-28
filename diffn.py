@@ -531,7 +531,7 @@ def make_r_arr_log_res_end(N, R_max, end_pts, k=1.6, R_min=0, dr=None):
     # adds more points to the last mesh element
     r_arr_end = np.linspace(r_arr_raw[-2], r_arr_raw[-1], end_pts)
 
-    return np.concatenate((r_arr_raw[:-1], r_arr_end))
+    return np.concatenate((r_arr_raw[:-2], r_arr_end))
 
 
 def make_r_arr_log2(N, R_max, R_min=0):
