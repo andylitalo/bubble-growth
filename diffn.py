@@ -579,6 +579,41 @@ def neumann(c, i, j, dcdr, r_arr):
     c[i] = dcdr * (r_arr[i] - r_arr[j]) + c[j]
 
 
+def remesh(grid, vals, th_lo, th_hi):
+    """
+    Creates a new mesh (and interpolates a new set of function values) to
+    adapt to moving gradients of concentration. Pairs of points spanning a
+    gradient that is below the low threshold will have one point removed. Pairs
+    of points spanning a gradient that is above the high threshold will have a
+    point added in the middle.
+
+    Currently only works in 1D.
+
+    Based on an informal discussion with Harsha Reddy (Caltech).
+    """
+    # computes gradient at each point with non-uniform central difference
+    # grad is two points shorter than vals, grid (missing endpoints)
+    grad = fd.dydx_non_1st(vals, grid)
+    # identifies where thresholds surpassed
+    inds_add = np.where(grad > th_hi)
+    inds_rem = np.where(grad < th_lo)
+
+    # adds points where needed
+    for i in inds_add:
+        # computes interpolated value
+        grid_new = np.mean(grid[i+1:i+3])
+        val_interp = ???
+        grid = np.insert(grid, i, grid_new)
+        vals = np.insert(vals, i, val_interp)
+
+    # removes points where not needed
+    if len(inds_rem) > 0:
+        grid = np.delete(grid, inds_rem)
+        vals = np.delete(vals, inds_rem)
+
+    return grid, vals
+
+
 def time_step(dt, t_prev, r_arr, c_prev, dcdt_fn, bc_specs_list, fixed_params,
                 apply_bc_first=True):
     """
