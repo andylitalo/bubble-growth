@@ -582,31 +582,49 @@ def neumann(c, i, j, dcdr, r_arr):
 def remesh(grid, vals, th_lo, th_hi):
     """
     Creates a new mesh (and interpolates a new set of function values) to
-    adapt to moving gradients of concentration. Pairs of points spanning a
-    gradient that is below the low threshold will have one point removed. Pairs
-    of points spanning a gradient that is above the high threshold will have a
-    point added in the middle.
+    adapt to moving gradients of concentration. Pairs of points next-nearest
+    neighbors with a difference in values below the low threshold will have the
+    point between them removed. Pairs neighboring points with a difference in
+    values above the high threshold will have a point added in the middle.
 
     Currently only works in 1D.
 
     Based on an informal discussion with Harsha Reddy (Caltech).
+
+    Parameters
+    ----------
     """
-    # computes gradient at each point with non-uniform central difference
-    # grad is two points shorter than vals, grid (missing endpoints)
-    grad = fd.dydx_non_1st(vals, grid)
-    # identifies where thresholds surpassed
-    inds_add = np.where(grad > th_hi)
-    inds_rem = np.where(grad < th_lo)
+    # computes difference in consecutive values
+    # difference is one point shorter than vals, grid
+    diff = np.abs(np.diff(vals))
+    # identifies where to add points (large gradient)
+    inds_add = np.where(diff > th_hi)[0]
 
     # adds points where needed
-    for i in inds_add:
-        # computes interpolated value
-        grid_new = np.mean(grid[i+1:i+3])
-        val_interp = ???
-        grid = np.insert(grid, i, grid_new)
-        vals = np.insert(vals, i, val_interp)
+    if len(inds_add) > 0:
+        # computes a cubic spline with 0 second derivative at the ends
+        # ('natural' boundary condition) for interpolation
+        f = scipy.interpolate.CubicSpline(grid, vals, bc_type='natural')
+        # counts number of points added to array
+        pts_added = 0
+        for i in inds_add:
+            # shifts index each time a point is added earlier in the array
+            j = i + pts_added
+            # adds new point in between existing points
+            x_new = np.mean(grid[j:j+2])
+            # computes interpolated value
+            y_new = f(x_new)
+            # adds new grid point and value; +1 to be in middle of prev pts
+            grid = np.insert(grid, j+1, x_new)
+            vals = np.insert(vals, j+1, y_new)
+            pts_added += 1
 
-    # removes points where not needed
+    # computes central difference (2 points shorter than vals, grid
+    diff_cd = np.abs(vals[2:] - vals[:-2])
+    # identifies indices with small gradients to remove from grid
+    # shifts by 1 since gradient has first point removed
+    inds_rem = np.where(diff_cd < th_lo)[0] + 1
+    # removes points
     if len(inds_rem) > 0:
         grid = np.delete(grid, inds_rem)
         vals = np.delete(vals, inds_rem)
