@@ -563,7 +563,7 @@ def make_r_arr_log_res_end(N, R_max, end_pts, k=1.6, R_min=0, dr=None):
     # creates logarithmically spaced array
     r_arr_raw = make_r_arr_log(N, R_max, k=k, R_min=R_min, dr=dr)
     # adds more points to the last mesh element
-    r_arr_end = np.linspace(r_arr_raw[-2], r_arr_raw[-1], end_pts)
+    r_arr_end = np.linspace(r_arr_raw[-2], r_arr_raw[-1], end_pts+1)
 
     return np.concatenate((r_arr_raw[:-2], r_arr_end))
 
@@ -613,7 +613,7 @@ def neumann(c, i, j, dcdr, r_arr):
     c[i] = dcdr * (r_arr[i] - r_arr[j]) + c[j]
 
 
-def remesh(grid, vals, th_lo, th_hi):
+def remesh(grid, vals, th_lo, th_hi, unif_vals=False):
     """
     Creates a new mesh (and interpolates a new set of function values) to
     adapt to moving gradients of concentration. Pairs of points next-nearest
@@ -645,17 +645,33 @@ def remesh(grid, vals, th_lo, th_hi):
     vals : N x 1 numpy array
         function values (some interpolated with cubic spline) of remeshed grid
     """
+    # initially has not remeshed
+    remeshed = False
     # computes difference in consecutive values
     # difference is one point shorter than vals, grid
     diff_arr = np.abs(np.diff(vals))
+    # restricts remeshing to points with positive slope
+    inds_nonpos = np.where(diff_arr <= 0)[0]
+    if len(inds_nonpos) > 0:
+        grid_full = grid
+        vals_full = vals
+        # cuts grid and vals arrays
+        end = inds_nonpos[0]
+        diff_arr = diff_arr[:end]
+        grid = grid[:end]
+        vals = vals[:end]
     # identifies where to add points (large gradient)
     inds_add = np.where(diff_arr > th_hi)[0]
 
     # adds points where needed
     if len(inds_add) > 0:
-        # computes a cubic spline with 0 second derivative at the ends
-        # ('natural' B.C.) for interpolating grid pts from values (inverse)
-        f = scipy.interpolate.CubicSpline(vals, grid, bc_type='natural')
+        remeshed = True
+        if unif_vals:
+            # computes a cubic spline with 0 second derivative at the ends
+            # ('natural' B.C.) for interpolating grid pts from values (inverse)
+            f = scipy.interpolate.CubicSpline(vals, grid, bc_type='natural')
+        else:
+            f = scipy.interpolate.CubicSpline(grid, vals, bc_type='natural')
         # counts number of points added to array
         pts_added = 0
         for i in inds_add:
@@ -663,28 +679,40 @@ def remesh(grid, vals, th_lo, th_hi):
             j = i + pts_added
             # gets the difference spanned by this mesh elemnt (original indices)
             diff = diff_arr[i]
-            print(diff)
             n_pts_to_add = int(diff / th_hi)
-            # computes evenly spaced values between pair of original values
-            vals_to_add = np.linspace(vals[j], vals[j+1], n_pts_to_add+2)[1:-1]
-            # computes interpolated grid points from evenly spaced values
-            pts_to_add = f(vals_to_add)
+
+            if unif_vals:
+                # computes evenly spaced values between pair of original values
+                vals_to_add = np.linspace(vals[j], vals[j+1], n_pts_to_add+2)[1:-1]
+                # computes interpolated grid points from evenly spaced values
+                pts_to_add = f(vals_to_add)
+            else:
+                print('adding pts')
+                print(n_pts_to_add)
+                pts_to_add = np.linspace(grid[j], grid[j+1], n_pts_to_add+2)[1:-1]
+                vals_to_add = f(pts_to_add)
             # adds new grid point and value; +1 to be in middle of prev pts
             grid = np.insert(grid, j+1, pts_to_add)
             vals = np.insert(vals, j+1, vals_to_add)
             pts_added += n_pts_to_add
 
     # computes central difference (2 points shorter than vals, grid
-    diff_cd = np.abs(vals[2:] - vals[:-2])
+    diff_cd = np.abs(np.asarray(vals[2:]) - np.asarray(vals[:-2]))
     # identifies indices with small gradients to remove from grid
     # shifts by 1 since gradient has first point removed
     inds_rem = np.where(diff_cd < th_lo)[0] + 1
     # removes points
     if len(inds_rem) > 0:
+        remeshed = True
         grid = np.delete(grid, inds_rem)
         vals = np.delete(vals, inds_rem)
 
-    return grid, vals
+    # restores cut parts of arrays
+    if len(inds_nonpos) > 0:
+        grid = np.concatenate((grid, grid_full[end:]))
+        vals = np.concatenate((vals, vals_full[end:]))
+
+    return remeshed, grid, vals
 
 
 def time_step(dt, t_prev, r_arr, c_prev, dcdt_fn, bc_specs_list, fixed_params,

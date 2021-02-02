@@ -28,6 +28,11 @@ from conversions import *
 ############################ FUNCTION DEFINITIONS ##############################
 
 
+def get_dr(r_arr):
+    """Calculates smallest grid spacing."""
+    return np.min(np.diff(r_arr))
+
+
 def grow(dt_sheath, dt, dcdt_fn, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s,
          dc_c_s_frac, t_nuc, R_nuc, polyol_data_file, eos_co2_file,
          bc_specs_list, if_tension_model='lin', d_tolman=0, adaptive_dt=True,
@@ -177,7 +182,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
                     R_min=0, dcdt_fn=diffn.calc_dcdt_sph_fix_D,
                     time_step_fn=bubble.time_step_dcdr, legacy_mode=False,
                     grid_fn=diffn.make_r_arr_lin, grid_params={}, adapt_freq=5,
-                    remesh_fn=diffn.remesh, remesh_params={}):
+                    remesh_fn=diffn.remesh, remesh_params={}, remesh_freq=1000):
     """
     Performs numerical computation of Epstein-Plesset model for comparison.
     Once confirmed to provide accurate estimation of Epstein-Plesset result,
@@ -254,8 +259,9 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
     t_flow = [t_nuc]
     # creates mesh grid
     r_arr = grid_fn(N, R_max, **grid_params)
-    # initializes list of the mesh spacing at the bubble interface
-    dr_list = [r_arr[1] - r_arr[0]]
+    # initializes list of the grids and times at which grids change
+    r_arr_list = [r_arr]
+    r_arr_t_list = [t_flow[-1]]
     # initializes concentration profile as uniformly bulk concentration [kg/m^3]
     c = [c_bulk*np.ones(len(r_arr))]
 
@@ -285,17 +291,17 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
         bubble.update_props(props_bub, props_lists_bub)
 
         ######### SHEATH FLOW #############
-        # first considers coarsening the grid by half if resolution of
-        # concentration gradient is sufficient
-        dr = r_arr[1] - r_arr[0]
-        # remeshes
-        if remesh_fn is not None:
-            r_arr, c[-1] = remesh_fn(r_arr, c[-1], **remesh_params)
-            dr, dt_max = update_dr_dt(dr, r_arr, dt_max)
-            # retroactively updates dr list in case grid was halved
-            dr_list[-1] = dr
-        # stores next grid spacing
-        dr_list += [dr]
+        # first considers remeshing to adapt to changing gradient
+        if remesh_fn is not None and (len(t_bub)%remesh_freq == 0):
+            print('consider remeshing')
+            remeshed, r_arr, c[-1] = remesh_fn(r_arr, c[-1], **remesh_params)
+            # only saves new grid if it remeshed and is not the first data point
+            # (first data point is already saved before this loop)
+            if remeshed and len(t_flow) > 1:
+                print('remeshed')
+                dt_max = update_dt_max(get_dr(r_arr_list[-1]), get_dr(r_arr), dt_max)
+                r_arr_list += [r_arr]
+                r_arr_t_list += [t_flow[-1]]
 
         # calculates properties after one time step with updated
         # boundary conditions
@@ -310,7 +316,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
         diffn.update_props(props_flow, t_flow, c)
 
     return t_flow, c, t_bub, m, D, p, p_bub, if_tension, c_bub, c_bulk, R, \
-                rho_co2, v, dr_list
+                rho_co2, v, (r_arr_list, r_arr_t_list)
 
 
 def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
@@ -320,7 +326,7 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
                  tol_R=0.001, alpha=0.3, D=-1, R_i=np.inf,
                  R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
                  time_step_fn=bubble.time_step_dcdr,
-                 remesh_fn=diffn.remesh, remesh_params={}):
+                 remesh_fn=diffn.remesh, remesh_params={}, remesh_freq=25):
     """
     Peforms numerical computation of diffusion into bubble from bulk accounting
     for effect of concentration of CO2 on the local diffusivity D.
@@ -389,7 +395,7 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
         # concentration gradient is sufficient
         dr = r_arr[1] - r_arr[0]
         # remeshes
-        if remesh_fn is not None:
+        if remesh_fn is not None and (len(t_bub)%remesh_freq == 0):
             r_arr, c[-1] = remesh_fn(r_arr, c[-1], **remesh_params)
             dr, dt_max = update_dr_dt(dr, r_arr, dt_max)
             # retroactively updates dr list in case grid was halved
@@ -530,8 +536,21 @@ def update_dr_dt(dr, r_arr, dt_max):
     """
     Updates values of grid spacing dr and maximum time step dt_max.
     """
-    dr_new = r_arr[1] - r_arr[0]
+    dr_new = np.min(np.diff(r_arr))
     if dt_max is not None:
+        print('update dt_max')
+        print(dt_max)
+        print(dr_new)
+        print(dr)
         dt_max *= (dr_new / dr)**2
 
     return dr_new, dt_max
+
+
+def update_dt_max(dr_prev, dr, dt_max):
+    """
+    Updates values of grid spacing dr and maximum time step dt_max.
+    """
+    if dt_max is not None:
+        dt_max *= (dr / dr_prev)**2
+    return dt_max
