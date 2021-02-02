@@ -596,28 +596,32 @@ def remesh(grid, vals, th_lo, th_hi):
     """
     # computes difference in consecutive values
     # difference is one point shorter than vals, grid
-    diff = np.abs(np.diff(vals))
+    diff_arr = np.abs(np.diff(vals))
     # identifies where to add points (large gradient)
-    inds_add = np.where(diff > th_hi)[0]
+    inds_add = np.where(diff_arr > th_hi)[0]
 
     # adds points where needed
     if len(inds_add) > 0:
         # computes a cubic spline with 0 second derivative at the ends
-        # ('natural' boundary condition) for interpolation
-        f = scipy.interpolate.CubicSpline(grid, vals, bc_type='natural')
+        # ('natural' B.C.) for interpolating grid pts from values (inverse)
+        f = scipy.interpolate.CubicSpline(vals, grid, bc_type='natural')
         # counts number of points added to array
         pts_added = 0
         for i in inds_add:
             # shifts index each time a point is added earlier in the array
             j = i + pts_added
-            # adds new point in between existing points
-            x_new = np.mean(grid[j:j+2])
-            # computes interpolated value
-            y_new = f(x_new)
+            # gets the difference spanned by this mesh elemnt (original indices)
+            diff = diff_arr[i]
+            print(diff)
+            n_pts_to_add = int(diff / th_hi)
+            # computes evenly spaced values between pair of original values
+            vals_to_add = np.linspace(vals[j], vals[j+1], n_pts_to_add+2)[1:-1]
+            # computes interpolated grid points from evenly spaced values
+            pts_to_add = f(vals_to_add)
             # adds new grid point and value; +1 to be in middle of prev pts
-            grid = np.insert(grid, j+1, x_new)
-            vals = np.insert(vals, j+1, y_new)
-            pts_added += 1
+            grid = np.insert(grid, j+1, pts_to_add)
+            vals = np.insert(vals, j+1, vals_to_add)
+            pts_added += n_pts_to_add
 
     # computes central difference (2 points shorter than vals, grid
     diff_cd = np.abs(vals[2:] - vals[:-2])
