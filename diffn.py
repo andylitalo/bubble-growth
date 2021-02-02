@@ -593,6 +593,23 @@ def remesh(grid, vals, th_lo, th_hi):
 
     Parameters
     ----------
+    grid : N x 1 array-like
+        grid points (x values) of the mesh
+    vals : N x 1 array-like
+        function values at the grid points
+    th_lo : float
+        lower threshold for difference in values of consecutive grid points,
+        below which a point is removed
+    th_hi : float
+        higher threshold for difference in values of consecutive grid points,
+        above which points are added until the threshold is no longer exceeded
+
+    Returns
+    -------
+    grid : N x 1 numpy array
+        remeshed grid points
+    vals : N x 1 numpy array
+        function values (some interpolated with cubic spline) of remeshed grid
     """
     # computes difference in consecutive values
     # difference is one point shorter than vals, grid
