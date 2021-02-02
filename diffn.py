@@ -433,6 +433,40 @@ def go(dt, t_f, R_min, R_o, N, c_0, dcdt_fn, bc_specs_list,
     return t, c
 
 
+def halve_grid(arr):
+    """
+    Halves the number of points in the grid by removing every other point.
+    Assumes grid has N + 1 elements, where N is divisible by 2.
+    The resulting grid will have N/2 + 1 elements.
+    """
+    print('halving grid')
+    return arr[::2]
+
+
+def manage_grid_halving(r_arr, c_arr, pts_per_grad):
+    """
+    Manages halving of grid by checking if the gradient is resolved by a
+    sufficient number of grid points and, if not, halving the grid (decimating
+    every other point) and adjusting the maximum time step accordingly.
+
+    Note: the last array in the list of concentrations "c" is decimated in
+    place.
+    """
+    dr = r_arr[1] - r_arr[0]
+    # only considers halving if array will be long enough after
+    if 2*pts_per_grad < len(r_arr):
+        dcdr = (c_arr[1]-c_arr[0]) / dr
+        # width of region with desired number of points for gradient after halving
+        delta_r = r_arr[2*pts_per_grad] - r_arr[0]
+        # difference between minimum and maximum concentrations
+        delta_c = np.max(c_arr) - c_arr[0]
+        # halves grid if gradient has enough mesh points
+        if dcdr*delta_r < delta_c:
+            r_arr = halve_grid(r_arr)
+            c_arr = halve_grid(c_arr)
+
+    return r_arr, c_arr
+
 
 def init(R_min, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s, dc_c_s_frac,
                         polyol_data_file, t_i=0):
