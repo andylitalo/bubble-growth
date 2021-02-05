@@ -255,7 +255,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
     fixed_params_bub = (D, p_in, p_s, v, L, c_s_interp_arrs, if_interp_arrs,
                         f_rho_co2, d_tolman)
     # fixed parameters for flow
-    fixed_params_flow = (D)
+    fixed_params_flow = (D,)
     # INITIALIZES PARAMETERS FOR DIFFUSION IN BULK
     # starts at nucleation time since we do not consider diffusion before bubble
     t_flow = [t_nuc]
@@ -343,7 +343,8 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
                  if_tension_model='lin', implicit=False, d_tolman=0,
                  tol_R=0.001, alpha=0.3, D=-1, R_i=np.inf,
                  R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
-                 time_step_fn=bubble.time_step_dcdr,
+                 time_step_fn=bubble.time_step_dcdr, grid_fn=diffn.make_r_arr_lin,
+                 grid_params={},
                  remesh_fn=diffn.remesh, remesh_params={}, remesh_freq=25):
     """
     Peforms numerical computation of diffusion into bubble from bulk accounting
@@ -378,8 +379,11 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
     fixed_params_flow = (dc, D_fn)
     # initializes list of diffusivities
     D = [D]
-    # initializes list of grid spacings [m]
-    dr_list = [r_arr[1] - r_arr[0]]
+    # creates mesh grid
+    r_arr = grid_fn(N, R_max, **grid_params)
+    # initializes list of the grids and times at which grids change
+    r_arr_list = [r_arr]
+    r_arr_t_list = [t_flow[-1]]
 
     # TIME-STEPPING -- BUBBLE NUCLEATES AND GROWS
     while t_bub[-1] <= t_f:
@@ -387,8 +391,6 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
         D += [D_fn(c_bub[-1])]
         fixed_params_bub = (D[-1], p_in, p_s, v, L, c_s_interp_arrs,
                                 if_interp_arrs, f_rho_co2, d_tolman)
-        time_step_params = (t_bub[-1], m[-1], if_tension[-1], R[-1],
-                                rho_co2[-1], r_arr, c[-1], fixed_params_bub)
         ########### BUBBLE GROWTH #########
         # collects parameters for bubble growth
         args_bub = (r_arr, c[-1], *fixed_params_bub)
@@ -412,16 +414,23 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
 
         ######### SHEATH FLOW #############
         # first considers coarsening the grid by half if resolution of
-        # concentration gradient is sufficient
-        dr = r_arr[1] - r_arr[0]
-        # remeshes
-        if remesh_fn is not None and (len(t_bub)%remesh_freq == 0):
-            r_arr, c[-1] = remesh_fn(r_arr, c[-1], **remesh_params)
-            dr, dt_max = update_dr_dt(dr, r_arr, dt_max)
-            # retroactively updates dr list in case grid was halved
-            dr_list[-1] = dr
-        # stores grid spacing
-        dr_list += [dr]
+        # first considers remeshing to adapt to changing gradient
+        if remesh_fn is not None and (len(t_bub)%remesh_freq == 5):
+            print('consider remeshing')
+            remeshed, r_arr, c[-1] = remesh_fn(r_arr, c[-1], **remesh_params)
+
+            # only saves new grid if it remeshed and is not the first data point
+            # (first data point is already saved before this loop)
+            if remeshed and len(t_flow) > 1:
+                print('remeshed')
+                dt_max = update_dt_max(get_dr(r_arr_list[-1]), get_dr(r_arr), dt_max)
+                # ensures new time step is shorter than maximum allowed, o/w
+                # the solution becomes unstable
+                dt = min(dt, dt_max)
+                print(dt, dt_max)
+                r_arr_list += [r_arr]
+                r_arr_t_list += [t_flow[-1]]
+
         # calculates properties after one time step with updated
         # boundary conditions
         # adds bubble radius R to grid of radii since r_arr starts at bubble
@@ -431,8 +440,10 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t_flow, c)
 
+    r_arr_data = (r_arr_list, r_arr_t_list)
+
     return t_flow, c, t_bub, m, D, p, p_bub, if_tension, c_bub, c_bulk, R, \
-            rho_co2, v, dr_list
+            rho_co2, v, r_arr_data
 
 
 def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i, dt_sheath,
