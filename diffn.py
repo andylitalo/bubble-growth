@@ -134,7 +134,7 @@ def calc_dcdt_cyl(r_arr, c_arr, fixed_params):
     return dcdt
 
 
-def calc_dcdt_sph_fix_D(xi_arr, c_arr, fixed_params):
+def calc_dcdt_sph_fix_D(xi_arr, c_arr, R, D):
     """
     Computes the time derivative of concentration dc/dt in spherical
     coordinates assuming concentration dependent diffusivity constant.
@@ -166,7 +166,6 @@ def calc_dcdt_sph_fix_D(xi_arr, c_arr, fixed_params):
         the boundary conditions)
     """
     # extracts fixed parameters
-    D, R = fixed_params
     r_arr = xi_arr + R
     # and their corresponding radii
     r_arr_c = r_arr[1:-1]
@@ -188,7 +187,7 @@ def calc_dcdt_sph_fix_D(xi_arr, c_arr, fixed_params):
 
     return dcdt
 
-def calc_dcdt_sph_fix_D_nonuniform(xi_arr, c_arr, fixed_params):
+def calc_dcdt_sph_fix_D_nonuniform(xi_arr, c_arr, R, D):
     """
     Computes the time derivative of concentration dc/dt in spherical
     coordinates assuming concentration dependent diffusivity constant.
@@ -221,8 +220,6 @@ def calc_dcdt_sph_fix_D_nonuniform(xi_arr, c_arr, fixed_params):
         (the concentrations at the end points at i=0 and i=N+1 are computed by
         the boundary conditions)
     """
-    # extracts fixed parameters
-    D, R = fixed_params
     r_arr = xi_arr + R
     # and their corresponding radii
     r_arr_c = r_arr[1:-1]
@@ -240,7 +237,7 @@ def calc_dcdt_sph_fix_D_nonuniform(xi_arr, c_arr, fixed_params):
     return dcdt
 
 
-def calc_dcdt_sph_vary_D(xi_arr, c_arr, fixed_params):
+def calc_dcdt_sph_vary_D(xi_arr, c_arr, R, dc, D_fn):
     """
     Computes the time derivative of concentration dc/dt in spherical
     coordinates assuming concentration-dependent diffusivity.
@@ -273,8 +270,6 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, fixed_params):
         (the concentrations at the end points at i=0 and i=N+1 are computed by
         the boundary conditions)
     """
-    # extracts fixed parameters
-    R, dc, D_fn = fixed_params
     r_arr = xi_arr + R
     # and their corresponding radii
     r_arr_c = r_arr[1:-1]
@@ -307,7 +302,7 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, fixed_params):
     return dcdt
 
 
-def calc_dcdt_sph_fix_D_transf(xi_arr, c_arr, fixed_params):
+def calc_dcdt_sph_fix_D_transf(xi_arr, c_arr, R, D):
     """
     Computes the time derivative of concentration dc/dt in spherical
     coordinates assuming concentration dependent diffusivity constant.
@@ -343,8 +338,6 @@ def calc_dcdt_sph_fix_D_transf(xi_arr, c_arr, fixed_params):
         (the concentrations at the end points at i=0 and i=N+1 are computed by
         the boundary conditions)
     """
-    # extracts fixed parameters
-    D, R = fixed_params
     # and their corresponding grid spacings
     dxi_arr = (xi_arr[2:] - xi_arr[0:-2])/2
     # calculates u
@@ -613,7 +606,7 @@ def neumann(c, i, j, dcdr, r_arr):
     c[i] = dcdr * (r_arr[i] - r_arr[j]) + c[j]
 
 
-def remesh(grid, vals, th_lo, th_hi, unif_vals=False):
+def remesh(grid, vals, th_lo, th_hi, unif_vals=False, second=False):
     """
     Creates a new mesh (and interpolates a new set of function values) to
     adapt to moving gradients of concentration. Pairs of points next-nearest
@@ -624,6 +617,10 @@ def remesh(grid, vals, th_lo, th_hi, unif_vals=False):
     Currently only works in 1D.
 
     Based on an informal discussion with Harsha Reddy (Caltech).
+
+    Failures:
+    - CubicSpline leads to instability (interpolates values that exceed bulk)
+    - thresholding based on magnitude of second derivative is uncalibrated
 
     Parameters
     ----------
@@ -637,6 +634,9 @@ def remesh(grid, vals, th_lo, th_hi, unif_vals=False):
     th_hi : float
         higher threshold for difference in values of consecutive grid points,
         above which points are added until the threshold is no longer exceeded
+    unif_vals : bool, optional
+        If True, uniformly spaces added points in value instead of in grid
+        points (Default is False)
 
     Returns
     -------
@@ -647,33 +647,49 @@ def remesh(grid, vals, th_lo, th_hi, unif_vals=False):
     """
     # initially has not remeshed
     remeshed = False
-    # computes difference in consecutive values
-    # difference is one point shorter than vals, grid
+    # computes difference in consecutive values (length N-1)
     diff_arr = np.abs(np.diff(vals))
+
+    # TODO make less heuristic
+    if second:
+        second_deriv = fd.d2ydx2_non_1st(np.asarray(vals), np.asarray(grid))
+        diff_arr[:-1] += np.sqrt(np.abs(second_deriv)*5/1E11)
+        print(diff_arr)
+
     # restricts remeshing to points with positive slope
     inds_nonpos = np.where(diff_arr <= 0)[0]
     if len(inds_nonpos) > 0:
-        grid_full = grid
-        vals_full = vals
+        # index of last point to consider for remeshing; +1 to include last pt
+        end = inds_nonpos[0]+1
+        # stores original values to re-append later
+        grid_end = grid[end:]
+        vals_end = vals[end:]
         # cuts grid and vals arrays
-        end = inds_nonpos[0]
-        diff_arr = diff_arr[:end]
         grid = grid[:end]
         vals = vals[:end]
+        # cuts difference array as well to prevent removing points past end
+        diff_arr = diff_arr[:end]
+
+
     # identifies where to add points (large gradient)
     inds_add = np.where(diff_arr > th_hi)[0]
 
     # adds points where needed
     if len(inds_add) > 0:
+        # records remeshing
         remeshed = True
+        # evenly spaces points in value and interpolates grid points
         if unif_vals:
             # computes a cubic spline with 0 second derivative at the ends
             # ('natural' B.C.) for interpolating grid pts from values (inverse)
             f = scipy.interpolate.CubicSpline(vals, grid, bc_type='natural')
+        # evenly spaces points in grid and interpolates value
         else:
             f = scipy.interpolate.CubicSpline(grid, vals, bc_type='natural')
+
         # counts number of points added to array
         pts_added = 0
+        # adds points element by element
         for i in inds_add:
             # shifts index each time a point is added earlier in the array
             j = i + pts_added
@@ -681,19 +697,24 @@ def remesh(grid, vals, th_lo, th_hi, unif_vals=False):
             diff = diff_arr[i]
             n_pts_to_add = int(diff / th_hi)
 
+            # evenly spaces points in value and interpolates grid points
             if unif_vals:
                 # computes evenly spaced values between pair of original values
                 vals_to_add = np.linspace(vals[j], vals[j+1], n_pts_to_add+2)[1:-1]
                 # computes interpolated grid points from evenly spaced values
                 pts_to_add = f(vals_to_add)
+            # evenly spaces points in grid and interpolates value
             else:
-                print('adding pts')
-                print(n_pts_to_add)
+                # computes evenly spaced grid points between pair of originals
                 pts_to_add = np.linspace(grid[j], grid[j+1], n_pts_to_add+2)[1:-1]
-                vals_to_add = f(pts_to_add)
+                # interpolates values from grid points to be added
+                # vals_to_add = f(pts_to_add)
+                vals_to_add = np.interp(pts_to_add, grid, vals)
+
             # adds new grid point and value; +1 to be in middle of prev pts
             grid = np.insert(grid, j+1, pts_to_add)
             vals = np.insert(vals, j+1, vals_to_add)
+            # increments total points added to grid
             pts_added += n_pts_to_add
 
     # computes central difference (2 points shorter than vals, grid
@@ -703,14 +724,22 @@ def remesh(grid, vals, th_lo, th_hi, unif_vals=False):
     inds_rem = np.where(diff_cd < th_lo)[0] + 1
     # removes points
     if len(inds_rem) > 0:
+        # records remeshing
         remeshed = True
         grid = np.delete(grid, inds_rem)
         vals = np.delete(vals, inds_rem)
 
     # restores cut parts of arrays
     if len(inds_nonpos) > 0:
-        grid = np.concatenate((grid, grid_full[end:]))
-        vals = np.concatenate((vals, vals_full[end:]))
+        # # TODO tidy up, decompose, optimize
+        # dr = grid[-1] - grid[-2]
+        # n = int((grid_end[0] - grid[-1])/dr)
+        # grid_mid = np.linspace(grid[-1], grid_end[0], n+2)
+        # vals_mid = vals_end[0]*np.ones([len(grid_mid)])
+        # grid = np.concatenate((grid[:-1], grid_mid, grid_end[1:]))
+        # vals = np.concatenate((vals[:-1], vals_mid, vals_end[1:]))
+        grid = np.concatenate((grid, grid_end))
+        vals = np.concatenate((vals, vals_end))
 
     return remeshed, grid, vals
 
