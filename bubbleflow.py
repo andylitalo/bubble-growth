@@ -13,6 +13,7 @@ sys.path.append('../libs/')
 
 # imports standard libraries
 import numpy as np
+import time
 
 # imports custom libraries
 import bubble
@@ -95,7 +96,7 @@ def grow(dt_sheath, dt, dcdt_fn, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s,
     while t[-1] <= t_nuc:
         # calculates properties after one time step
         props_flow = diffn.time_step(dt_sheath, t[-1], r_arr, c[-1], dcdt_fn,
-                            bc_specs_list, fixed_params_flow)
+                            bc_specs_list, R[-1], fixed_params_flow)
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t, c)
 
@@ -123,7 +124,7 @@ def grow(dt_sheath, dt, dcdt_fn, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s,
         # calculates properties after one time step with updated
         # boundary conditions
         props_flow = diffn.time_step(dt, t[-1], r_arr, c[-1], dcdt_fn,
-                            bc_bub_cap(c_bub[-1]), fixed_params_flow)
+                            bc_bub_cap(c_bub[-1]), R[-1], fixed_params_flow)
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t, c)
 
@@ -182,7 +183,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
                     R_min=0, dcdt_fn=diffn.calc_dcdt_sph_fix_D,
                     time_step_fn=bubble.time_step_dcdr, legacy_mode=False,
                     grid_fn=diffn.make_r_arr_lin, grid_params={}, adapt_freq=5,
-                    remesh_fn=diffn.remesh, remesh_params={}, remesh_freq=1000):
+                    remesh_fn=None, remesh_params={}, remesh_freq=1000):
     """
     Performs numerical computation of Epstein-Plesset model for comparison.
     Once confirmed to provide accurate estimation of Epstein-Plesset result,
@@ -253,7 +254,8 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
     # collects parameters relevant for bubble growth
     fixed_params_bub = (D, p_in, p_s, v, L, c_s_interp_arrs, if_interp_arrs,
                         f_rho_co2, d_tolman)
-
+    # fixed parameters for flow
+    fixed_params_flow = (D)
     # INITIALIZES PARAMETERS FOR DIFFUSION IN BULK
     # starts at nucleation time since we do not consider diffusion before bubble
     t_flow = [t_nuc]
@@ -292,16 +294,24 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
 
         ######### SHEATH FLOW #############
         # first considers remeshing to adapt to changing gradient
-        if remesh_fn is not None and (len(t_bub)%remesh_freq == 0):
+        start = time.time()
+        if remesh_fn is not None and (len(t_bub)%remesh_freq == 5):
             print('consider remeshing')
             remeshed, r_arr, c[-1] = remesh_fn(r_arr, c[-1], **remesh_params)
+
             # only saves new grid if it remeshed and is not the first data point
             # (first data point is already saved before this loop)
             if remeshed and len(t_flow) > 1:
                 print('remeshed')
                 dt_max = update_dt_max(get_dr(r_arr_list[-1]), get_dr(r_arr), dt_max)
+                # ensures new time step is shorter than maximum allowed, o/w
+                # the solution becomes unstable
+                dt = min(dt, dt_max)
+                print(dt, dt_max)
                 r_arr_list += [r_arr]
                 r_arr_t_list += [t_flow[-1]]
+
+            print('Time for remeshing = {0:.1f} ms.'.format(1000*(time.time()-start)))
 
         # calculates properties after one time step with updated
         # boundary conditions
@@ -309,11 +319,19 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
         # interface
         # for now, uses same grid spacing for each time step
         # computes time step
-        fixed_params_flow = (D, R[-1])
         props_flow = diffn.time_step(dt, t_flow[-1], r_arr, c[-1], dcdt_fn,
-                        bc_bub_cap(c_bub[-1], c_max=c_bulk), fixed_params_flow)
+                        bc_bub_cap(c_bub[-1], c_max=c_bulk), R[-1], fixed_params_flow)
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t_flow, c)
+
+        if np.max(c[-1]) > c[-1][-1]:
+            print('unstable')
+            print(c[-1])
+            print(r_arr)
+            print(dt_max)
+            dr_min = np.min(np.diff(r_arr))
+            print(0.5*dr_min**2/D)
+
 
     return t_flow, c, t_bub, m, D, p, p_bub, if_tension, c_bub, c_bulk, R, \
                 rho_co2, v, (r_arr_list, r_arr_t_list)
@@ -356,6 +374,8 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
     _, _, p_in, p_s, v, L, _, c_s_interp_arrs, \
     if_interp_arrs, f_rho_co2, d_tolman, _ = fixed_params_tmp
 
+    # fixes parameters for flow
+    fixed_params_flow = (dc, D_fn)
     # initializes list of diffusivities
     D = [D]
     # initializes list of grid spacings [m]
@@ -406,9 +426,8 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
         # boundary conditions
         # adds bubble radius R to grid of radii since r_arr starts at bubble
         # interface
-        fixed_params_flow = (R[-1], dc, D_fn)
         props_flow = diffn.time_step(dt, t_flow[-1], r_arr, c[-1], dcdt_fn,
-                        bc_bub_cap(c_bub[-1], c_max=c_wall), fixed_params_flow)
+                        bc_bub_cap(c_bub[-1], c_max=c_wall), R[-1], fixed_params_flow)
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t_flow, c)
 
@@ -452,7 +471,8 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i, dt_shea
     # extracts relevant parameters from bubble initiation
     _, _, p_in, p_s, v, L, _, c_s_interp_arrs, \
     if_interp_arrs, f_rho_co2, d_tolman, _ = fixed_params_tmp
-
+    # declares fixed flow parameters
+    fixed_params_flow = (dc, D_fn)
     # initializes boundary conditions for sheath flow (no bubble)
     bc_specs_list = bc_cap(c_max=c_wall)
     # initializes list of diffusivities
@@ -522,9 +542,8 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i, dt_shea
         # boundary conditions
         # adds bubble radius R to grid of radii since r_arr starts at bubble
         # interface
-        fixed_params_flow = (R[-1], dc, D_fn)
         props_flow = diffn.time_step(dt, t_flow[-1], r_arr, c[-1], dcdt_fn,
-                        bc_specs_list, fixed_params_flow)
+                        bc_specs_list, R[-1], fixed_params_flow)
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t_flow, c)
 

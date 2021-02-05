@@ -744,7 +744,7 @@ def remesh(grid, vals, th_lo, th_hi, unif_vals=False, second=False):
     return remeshed, grid, vals
 
 
-def time_step(dt, t_prev, r_arr, c_prev, dcdt_fn, bc_specs_list, fixed_params,
+def time_step(dt, t_prev, r_arr, c_prev, dcdt_fn, bc_specs_list, R, fixed_params,
                 apply_bc_first=True):
     """
     Advances system forward by one time step.
@@ -797,7 +797,7 @@ def time_step(dt, t_prev, r_arr, c_prev, dcdt_fn, bc_specs_list, fixed_params,
     c_prev_arr = np.asarray(c_prev)
 
     # updates concentration with explicit Euler method
-    c_curr_arr = c_prev_arr[1:-1] + dt*dcdt_fn(r_arr, c_prev_arr, fixed_params)
+    c_curr_arr = c_prev_arr[1:-1] + dt*dcdt_fn(r_arr, c_prev_arr, R, *fixed_params)
     # adds end points for the application of the boundary conditions
     c_curr = [0] + list(c_curr_arr) + [0]
 
