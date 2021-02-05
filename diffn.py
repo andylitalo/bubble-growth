@@ -505,6 +505,13 @@ def init_sub(R_min, R_i, R_o, N, d, v, p_s, dc_c_s_frac, polyol_data_file, t_i=0
     return t, c, r_arr, c_0, c_s, t_f, fixed_params
 
 
+def make_all_r_arr(r_arr_data, t_list):
+    """Makes all r arrays. ***UNTESTED***"""
+    r_arr_list, r_arr_t_list = r_arr_data
+    r_arr_ = [r_arr_list[np.where(np.logical_and(t >= r_arr_t_list,
+                t < r_arr_t_list))[0][0]] for t in t_list]
+    return r_arr_
+
 def make_r_arr_lin(N, R_max, R_min=0):
     """Makes numpy array of radius with spacing dr from R_min to R_max."""
     r_arr = np.linspace(R_min, R_max, N+1)
