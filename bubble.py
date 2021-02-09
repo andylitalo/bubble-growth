@@ -652,7 +652,7 @@ def time_step_dcdr_legacy(dt, t_prev, m_prev, if_tension_prev, R_prev,
     R, p_bub = calc_R_p_bub(m, p, R0, p_bub0, if_interp_arrs,
                                   f_rho_co2, d_tolman)
 
-    if_tension = polyco2.calc_if_tension(p_bub, if_interp_arrs, R, d_tolman=d_tolman) # [N/m]]
+    if_tension = polyco2.calc_if_tension(p_bub, if_interp_arrs, R, d_tolman=d_tolman) # [N/m]
     rho_co2 = f_rho_co2(p_bub) # [kg/m^3]
 
     return dt, t, m, p, p_bub, if_tension, c_s, R, rho_co2
@@ -687,6 +687,7 @@ def time_step_dcdr(dt, inputs, args):
     # updates mass with explicit Euler method--inputs are i^th terms,
     # so we pass in R[-1] since R has not been updated to R_{i+1} yet
     m = m_prev + dt*calc_dmdt_dcdr_fix_D(r_arr, c_arr, R_prev, D)
+
     # self-consistently solves for radius and pressure of bubble
     R, p_bub = calc_R_p_bub(m, p, R0, p_bub0, if_interp_arrs,
                                   f_rho_co2, d_tolman)
@@ -697,7 +698,7 @@ def time_step_dcdr(dt, inputs, args):
     # groups outputs into updated values of the inputs (except for dt, which
     # is passed separately to allow it to be adjusted)
     updated_inputs = (t, m, if_tension, R, rho_co2)
-    # and newly calculated alues
+    # and newly calculated values
     new_outputs = (p, p_bub, c_s)
 
     return updated_inputs, new_outputs

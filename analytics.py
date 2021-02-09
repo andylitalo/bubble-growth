@@ -197,7 +197,7 @@ def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
 
 def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
                      i_t_nuc, sigma_R=0.01, ax=None, max_iter=12, i_t=0,
-                     i_R=8):
+                     i_R=8, dict_args={}):
     """
     Fits the bubble growth to a given bubble radius at a given time. Plots
     the different trajectories if an axis handle is given.
@@ -213,17 +213,16 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
 
     # computes bubble growth trajectory with lowest nucleation time
     args[i_t_nuc] = t_nuc_lo
-    output = growth_fn(*tuple(args))
+    output = growth_fn(*tuple(args), **dict_args)
     t = output[i_t]
     R = output[i_R]
 
-        # finds index of timeline corresponding to measurement of bubble size
+    # finds index of timeline corresponding to measurement of bubble size
     i_bubble = next(i for i in range(len(t)) if t[i] >= t_bubble)
     R_bubble_pred = R[i_bubble]
     if R_bubble_pred < R_bubble:
-        print('Predicted bubble radius is larger than fit for lowest nucleation time. Terminating early.')
-        results = (t, m, D, p, p_bubble, if_tension, c_s, R, rho_co2)
-        return t_nuc_lo, results
+        print('Predicted bubble radius is smaller than fit for lowest nucleation time. Terminating early.')
+        return t_nuc_lo, output
 
     # computes error in using lowest nucleation time
     err_R = np.abs(R_bubble_pred - R_bubble)/R_bubble # fractional error in bubble radius
@@ -234,7 +233,7 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
         t_nuc = (t_nuc_lo + t_nuc_hi)/2
         # computes bubble growth trajectory with new bubble nucleation time
         args[i_t_nuc] = t_nuc
-        output = growth_fn(*tuple(args))
+        output = growth_fn(*tuple(args), **dict_args)
         # extracts time and radius of bubble growth trajectory from output
         t = output[i_t] # [s]
         R = output[i_R] # [m]

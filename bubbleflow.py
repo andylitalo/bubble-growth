@@ -436,7 +436,7 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
         # adds bubble radius R to grid of radii since r_arr starts at bubble
         # interface
         props_flow = diffn.time_step(dt, t_flow[-1], r_arr, c[-1], dcdt_fn,
-                        bc_bub_cap(c_bub[-1], c_max=c_wall), R[-1], fixed_params_flow)
+                bc_bub_cap(c_bub[-1], c_max=c_wall), R[-1], fixed_params_flow)
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t_flow, c)
 
@@ -446,13 +446,14 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
             rho_co2, v, r_arr_data
 
 
-def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i, dt_sheath,
-                 D_fn=polyco2.calc_D_lin,
-                 adaptive_dt=True, if_tension_model='lin', implicit=False,
-                 d_tolman=0, tol_R=0.001, alpha=0.3, D=-1, t_i=0,
-                 R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
-                 time_step_fn=bubble.time_step_dcdr,
-                 remesh_fn=diffn.remesh, remesh_params={}):
+def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i,
+                dt_sheath, D_fn=polyco2.calc_D_lin, adaptive_dt=True,
+                adapt_freq=1, legacy_mode=False, if_tension_model='lin',
+                implicit=False, d_tolman=0, tol_R=0.001, alpha=0.3, D=-1, t_i=0,
+                t_f=None, R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
+                time_step_fn=bubble.time_step_dcdr,
+                grid_fn=diffn.make_r_arr_lin, grid_params={},
+                remesh_fn=None, remesh_params={}, remesh_freq=25):
     """
     Couples the diffusion in the sheath flow around the bubble with the growth
     of the bubble and assumes that the sheath is incompressible and that the
@@ -461,14 +462,22 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i, dt_shea
     The only difference from num_vary_D() is that R_i is a required parameter
     rather than default infinity. This function just puts a new name on the
     computation.
+
+    ***Note: increasing the adapt_freq above 1 (i.e., not adjusting the time
+    step each time) can lead to failure if the model undergoes a change
+    requiring high time resolution in between calls to adaptive_time_step().
     """
+    # sets maximum time step as sheath flow time step
+    dt_max = dt_sheath
     # extracts parameters used in Epstein-Plesset model
     dt0, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file = eps_params
     # INITIALIZES PARAMETERS FOR DIFFUSION IN BULK
     # assumes no sheath (i.e. R_i = R_o)
     t_flow, c, r_arr, _, _, \
-    t_f, fixed_params = diffn.init_sub(R_min, R_i, R_max, N, L, v, p_s,
+    t_L, fixed_params = diffn.init_sub(R_min, R_i, R_max, N, L, v, p_s,
                                         dc_c_s_frac, polyol_data_file, t_i=t_i)
+    if t_f is None:
+        t_f = t_L
     dc, interp_arrs = fixed_params
     # extracts "bulk" concentration from outer edge of initial profile [kg/m^3]
     c_wall = c[0][-1]
@@ -488,9 +497,12 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i, dt_shea
     bc_specs_list = bc_cap(c_max=c_wall)
     # initializes list of diffusivities
     D = [D]
-    # initializes list of grid spacings [m]
-    dr_list = [r_arr[1]-r_arr[0]]
-    dr = dr_list[-1]
+    # creates mesh grid
+    r_arr = grid_fn(N, R_max, **grid_params)
+    # initializes list of the grids and times at which grids change
+    r_arr_list = [r_arr]
+    r_arr_t_list = [t_flow[-1]]
+
     # initializes time step at sheath time step [s]
     dt = dt_sheath
     # counter for marking progress
@@ -516,39 +528,53 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i, dt_shea
                                     if_interp_arrs, f_rho_co2, d_tolman)
             time_step_params = (t_bub[-1], m[-1], if_tension[-1], R[-1],
                                     rho_co2[-1], r_arr, c[-1], fixed_params_bub)
-            if adaptive_dt:
-                dt, props_bub = bubble.adaptive_time_step(dt, time_step_params,
-                                                        time_step_fn, tol_R,
-                                                        alpha, dt_max=dt_sheath)
+            ########### BUBBLE GROWTH #########
+            # collects parameters for bubble growth
+            args_bub = (r_arr, c[-1], *fixed_params_bub)
+            inputs_bub = (t_bub[-1], m[-1], if_tension[-1], R[-1],
+                                    rho_co2[-1])
+            if adaptive_dt and (len(t_bub)%adapt_freq == 0):
+                dt, updated_inputs_bub, \
+                outputs_bub = bubble.adaptive_time_step(dt,
+                                                    inputs_bub, args_bub,
+                                                    time_step_fn, tol_R, alpha,
+                                                    dt_max=dt_max,
+                                                    legacy_mode=legacy_mode)
             else:
                 # calculates properties after one time step
-                props_bub = time_step_fn(dt, *time_step_params)
+                updated_inputs_bub, outputs_bub = time_step_fn(dt, inputs_bub, args_bub)
 
             # updates properties of bubble at new time step
-            bubble.update_props(props_bub, t_bub, m, p, p_bub, if_tension,
-                                c_bub, R, rho_co2)
+            props_bub = (*updated_inputs_bub, *outputs_bub)
+            props_lists_bub = [t_bub, m, if_tension, R, rho_co2, p, p_bub, c_bub]
+            bubble.update_props(props_bub, props_lists_bub)
             # updates boundary condition with concentration at bubble surface
             bc_specs_list = bc_bub_cap(c_bub[-1], c_max=c_wall)
 
-            # once bubble has nucleated considers coarsening the grid by half
-            # if resolution of concentration gradient is sufficient
-            dr = r_arr[1] - r_arr[0]
-            # remeshes
-            if remesh_fn is not None:
-                r_arr, c[-1] = remesh_fn(r_arr, c[-1], **remesh_params)
-                dr, dt_sheath = update_dr_dt(dr, r_arr, dt_sheath)
-                # retroactively updates dr list in case grid was halved
-                dr_list[-1] = dr
-            dr_list += [dr]
         ######### SHEATH FLOW #############
+        # first considers coarsening the grid by half if resolution of
+        # first considers remeshing to adapt to changing gradient
+        if remesh_fn is not None and (len(t_bub)%remesh_freq == 5):
+            print('consider remeshing')
+            remeshed, r_arr, c[-1] = remesh_fn(r_arr, c[-1], **remesh_params)
+
+            # only saves new grid if it remeshed and is not the first data point
+            # (first data point is already saved before this loop)
+            if remeshed and len(t_flow) > 1:
+                print('remeshed')
+                dt_max = update_dt_max(get_dr(r_arr_list[-1]), get_dr(r_arr), dt_max)
+                # ensures new time step is shorter than maximum allowed, o/w
+                # the solution becomes unstable
+                dt = min(dt, dt_max)
+                r_arr_list += [r_arr]
+                r_arr_t_list += [t_flow[-1]]
+
         # if the next time step will surpass the nucleation time for the first
         # time, shorten it so it exactly reaches the nucleation time
         if (t_flow[-1] + dt >= t_nuc) and (t_flow[-1] < t_nuc):
             # shortens time step [s]
             dt = t_nuc - t_flow[-1]
 
-        # stores grid spacing
-        dr_list += [dr]
         # calculates properties after one time step with updated
         # boundary conditions
         # adds bubble radius R to grid of radii since r_arr starts at bubble
@@ -558,8 +584,10 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i, dt_shea
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t_flow, c)
 
+    r_arr_data = (r_arr_list, r_arr_t_list)
+
     return t_flow, c, t_bub, m, D, p, p_bub, if_tension, c_bub, c_bulk, R, \
-            rho_co2, v, dr_list
+            rho_co2, v, r_arr_data
 
 
 def update_dr_dt(dr, r_arr, dt_max):
