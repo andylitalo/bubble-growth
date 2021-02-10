@@ -307,7 +307,6 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
                 # ensures new time step is shorter than maximum allowed, o/w
                 # the solution becomes unstable
                 dt = min(dt, dt_max)
-                print(dt, dt_max)
                 r_arr_list += [r_arr]
                 r_arr_t_list += [t_flow[-1]]
 
@@ -526,8 +525,6 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i,
             D += [D_fn(c_bub[-1])]
             fixed_params_bub = (D[-1], p_in, p_s, v, L, c_s_interp_arrs,
                                     if_interp_arrs, f_rho_co2, d_tolman)
-            time_step_params = (t_bub[-1], m[-1], if_tension[-1], R[-1],
-                                    rho_co2[-1], r_arr, c[-1], fixed_params_bub)
             ########### BUBBLE GROWTH #########
             # collects parameters for bubble growth
             args_bub = (r_arr, c[-1], *fixed_params_bub)
