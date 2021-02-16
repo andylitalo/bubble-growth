@@ -408,8 +408,7 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac=0.01,
         ######### SHEATH FLOW #############
         # first considers coarsening the grid by half if resolution of
         # first considers remeshing to adapt to changing gradient
-        if remesh_fn is not None and (len(t_bub)%remesh_freq == 5):
-            print('consider remeshing')
+        if remesh_fn is not None and (len(t_bub)%remesh_freq == 0):
             remeshed, r_arr, c[-1] = remesh_fn(r_arr, c[-1], **remesh_params)
 
             # only saves new grid if it remeshed and is not the first data point
