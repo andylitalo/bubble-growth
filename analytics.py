@@ -149,7 +149,7 @@ def calc_dcdr_eps_fix_D(N_list, R_max, t_nuc, eps_params, dt_max_list=None):
 
 
 def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
-                    i_R=10, i_t_num=2, i_dr=-1):
+                    i_R=10, i_t_num=2, i_dr=-1, ret_comp_time=False):
     """
     Follow up to compare_dcdr(). Compares the predicted radius of the bubble
     under different numerical schemes to a reference (typically the Epstein-
@@ -166,6 +166,7 @@ def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
     t_num_list = []
     dr_list_list = []
     raw_vals_list = []
+    comp_time_list = []
 
     # computes dc/dr for numerical functions
     for input, fn in zip(num_input_list, num_fn_list):
@@ -190,9 +191,15 @@ def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
         t_num_list += [t_num]
         raw_vals_list += [raw_vals]
 
-        print('Computation time = {0:f} s.'.format(time.time() - start_time))
+        comp_time = time.time() - start_time
+        comp_time_list += [comp_time]
+        print('Computation time = {0:f} s.'.format(comp_time))
 
-    return R_diff_list, dr_list_list, raw_vals_list
+    ret_vals = [R_diff_list, dr_list_list, raw_vals_list]
+    if ret_comp_time:
+        ret_vals += [comp_time_list]
+
+    return ret_vals
 
 
 def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
