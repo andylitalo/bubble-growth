@@ -171,17 +171,17 @@ def calc_dcdt_sph_fix_D(xi_arr, c_arr, R, D):
     # and their corresponding radii
     r_arr_c = r_arr[1:-1]
     # and their corresponding grid spacings
-    dr_arr = (r_arr[2:] - r_arr[:-2]) / 2
+    dr = r_arr[1] - r_arr[0]
 
     # FIRST TERM: 2/r * D(c) * dc/dr
     # computes spatial derivative of concentration dc/dr with central difference
-    dcdr_arr = (c_arr[2:] - c_arr[:-2]) / (2*dr_arr)
+    dcdr_arr = fd.dydx_cd_2nd(c_arr, dr)
     term1 = 2/r_arr_c * D * dcdr_arr
 
     # SECOND TERM: D(c) * d2c/dr2
     # computes second spatial derivative of concentration with central
     # difference formula
-    d2cdr2_arr = (c_arr[2:] - 2*c_arr[1:-1] + c_arr[:-2]) / (dr_arr**2)
+    d2cdr2_arr = fd.d2ydx2_cd_2nd(c_arr, dr)
     term2 = D * d2cdr2_arr
 
     dcdt = term1 + term2
@@ -256,13 +256,12 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, R, dc, D_fn):
     c_arr : numpy array of N+1 floats
         concentrations of CO2 at each of the points in r_arr
         [kg CO2 / m^3 polyol-co2]
-    fixed_params: list
-        R : float
-            radius of bubble [m]
-        dc : float
-            step size in concentration dimension [kg/m^3]
-        interp_arrs : tuple of numpy arrays
-            numpy arrays for interpolation
+    R : float
+        radius of bubble [m]
+    dc : float
+        step size in concentration dimension [kg/m^3]
+    interp_arrs : tuple of numpy arrays
+        numpy arrays for interpolation
 
     Returns
     -------
@@ -275,7 +274,7 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, R, dc, D_fn):
     # and their corresponding radii
     r_arr_c = r_arr[1:-1]
     # and their corresponding grid spacings
-    dr_arr = (r_arr[2:] - r_arr[:-2]) / 2
+    dr = r_arr[1] - r_arr[0]
     # and the corresponding concentrations
     c_arr_c = c_arr[1:-1]
     # computes diffusivity constant at each point on grid [m^2/s]
@@ -283,7 +282,7 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, R, dc, D_fn):
 
     # FIRST TERM: 2/r * D(c) * dc/dr
     # computes spatial derivative of concentration dc/dr with central difference
-    dcdr_arr = (c_arr[2:] - c_arr[:-2]) / (2*dr_arr)
+    dcdr_arr = fd.dydx_cd_2nd(c_arr, dr)
     term1 = 2/r_arr_c * D_arr * dcdr_arr
 
     # SECOND TERM: dD/dc * (dc/dr)^2
@@ -295,7 +294,72 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, R, dc, D_fn):
     # THIRD TERM: D(c) * d2c/dr2
     # computes second spatial derivative of concentration with central
     # difference formula
-    d2cdr2_arr = (c_arr[2:] - 2*c_arr[1:-1] + c_arr[:-2]) / (dr_arr**2)
+    d2cdr2_arr = fd.d2ydx2_cd_2nd(c_arr, dr)
+    term3 = D_arr * d2cdr2_arr
+
+    dcdt = term1 + term2 + term3
+
+    return dcdt
+
+
+def calc_dcdt_sph_vary_D_nonuniform(xi_arr, c_arr, R, dc, D_fn):
+    """
+    Computes the time derivative of concentration dc/dt in spherical
+    coordinates assuming concentration-dependent diffusivity.
+
+    In spherical coordinates Fick's law of dc/dt = div(D(c)grad(c)) becomes:
+
+            dc/dt = 2/r*D(c)*dc/dr + dD/dc*(dc/dr)^2 + D(c)*d2c/dr2
+
+    assuming spherical symmetry. Allows for a non-uniform grid but, as a result,
+    uses first-order instead of second-order finite difference schemes.
+
+    Parameters
+    ----------
+    xi_arr : numpy array of N+1 floats
+        radial coordinates of points in mesh measured from radius of bubble [m]
+    c_arr : numpy array of N+1 floats
+        concentrations of CO2 at each of the points in r_arr
+        [kg CO2 / m^3 polyol-co2]
+    R : float
+        radius of bubble [m]
+    dc : float
+        step size in concentration dimension [kg/m^3]
+    interp_arrs : tuple of numpy arrays
+        numpy arrays for interpolation
+
+    Returns
+    -------
+    dcdt : numpy array of N-1 floats
+        time derivatives of concentration at each of the interior mesh points
+        (the concentrations at the end points at i=0 and i=N+1 are computed by
+        the boundary conditions)
+    """
+    r_arr = xi_arr + R
+    # and their corresponding radii
+    r_arr_c = r_arr[1:-1]
+    # and their corresponding grid spacings
+    dr = r_arr[1] - r_arr[0]
+    # and the corresponding concentrations
+    c_arr_c = c_arr[1:-1]
+    # computes diffusivity constant at each point on grid [m^2/s]
+    D_arr = np.asarray([D_fn(c) for c in c_arr_c])
+
+    # FIRST TERM: 2/r * D(c) * dc/dr
+    # computes spatial derivative of concentration dc/dr with central difference
+    dcdr_arr = fd.dydx_non_1st(c_arr, r_arr)
+    term1 = 2/r_arr_c * D_arr * dcdr_arr
+
+    # SECOND TERM: dD/dc * (dc/dr)^2
+    # computes dD/dc [m^2/s / kg/m^3]
+    dDdc_arr = np.asarray([polyco2.calc_dDdc_fn(c, dc, D_fn) \
+                                                    for c in c_arr_c])
+    term2 = dDdc_arr * (dcdr_arr)**2
+
+    # THIRD TERM: D(c) * d2c/dr2
+    # computes second spatial derivative of concentration with central
+    # difference formula
+    d2cdr2_arr = fd.d2ydx2_non_1st(c_arr, r_arr)
     term3 = D_arr * d2cdr2_arr
 
     dcdt = term1 + term2 + term3
@@ -755,7 +819,7 @@ def remesh(grid, vals, th_lo, th_hi, unif_vals=False, second=False):
     return remeshed, grid, vals
 
 
-def remesh_once_manual(grid, vals):
+def remesh_once_manual(grid, vals, i_switch=1, interp_kind='linear', dk=0.2):
     """
     Remeshes once using manually selected time point for remeshing and grid to
     remesh to. Based on discussion with JAK on Feb. 10, 2021.
@@ -765,22 +829,22 @@ def remesh_once_manual(grid, vals):
     if k==1.2:
         return remeshed, grid, vals
 
-    val_lo = np.min(vals)
-    val_hi = np.max(vals)
+    val_lo = vals[0]
+    val_hi = vals[-1]
     range = val_hi - val_lo
     i_diffn = np.where(vals - val_lo >= range*(1-1/np.exp(1)))[0][0]
-    if i_diffn > 1:
+    if i_diffn > i_switch:
         remeshed = True
         N = len(grid)
         R_max = np.max(grid)
-        # reduces the k value by 0.2
-        grid_new = make_r_arr_log(N, R_max, k=k-0.2)
+        # reduces the k value by fixed value
+        grid_new = make_r_arr_log(N, R_max, k=k-dk)
         grid_new[-1] = grid[-1]
-        f = scipy.interpolate.interp1d(grid, vals, kind='linear')
+        f = scipy.interpolate.interp1d(grid, vals, kind=interp_kind)
         vals_new = f(grid_new)
         if np.any(vals_new > val_hi):
             print('interpolation exceeded bulk value')
-            vals_new[vals_new > val_hi] = vals[-1]
+            vals_new[vals_new > val_hi] = val_hi
 
         grid = grid_new
         vals = vals_new

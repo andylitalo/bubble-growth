@@ -330,7 +330,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
                 rho_co2, v, (r_arr_list, r_arr_t_list)
 
 
-def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac,
+def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac=0.01,
                  dt_max=None, D_fn=polyco2.calc_D_lin,
                  adaptive_dt=True, adapt_freq=5, legacy_mode=False,
                  if_tension_model='lin', implicit=False, d_tolman=0,
