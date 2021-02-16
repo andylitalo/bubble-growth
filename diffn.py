@@ -16,6 +16,7 @@ sys.path.append('../libs/')
 import numpy as np
 import pandas as pd
 import scipy.optimize
+import scipy.interpolate
 
 # imports custom libraries
 import polyco2
@@ -445,6 +446,8 @@ def manage_grid_halving(r_arr, c_arr, pts_per_grad):
     Note: the last array in the list of concentrations "c" is decimated in
     place.
     """
+    halved = False
+    # computes grid spacing at interface
     dr = r_arr[1] - r_arr[0]
     # only considers halving if array will be long enough after
     if 2*pts_per_grad < len(r_arr):
@@ -457,8 +460,9 @@ def manage_grid_halving(r_arr, c_arr, pts_per_grad):
         if dcdr*delta_r < delta_c:
             r_arr = halve_grid(r_arr)
             c_arr = halve_grid(c_arr)
+            halved = True
 
-    return r_arr, c_arr
+    return halved, r_arr, c_arr
 
 
 def init(R_min, R_o, N, eta_i, eta_o, d, L, Q_i, Q_o, p_s, dc_c_s_frac,
@@ -747,6 +751,39 @@ def remesh(grid, vals, th_lo, th_hi, unif_vals=False, second=False):
         # vals = np.concatenate((vals[:-1], vals_mid, vals_end[1:]))
         grid = np.concatenate((grid, grid_end))
         vals = np.concatenate((vals, vals_end))
+
+    return remeshed, grid, vals
+
+
+def remesh_once_manual(grid, vals):
+    """
+    Remeshes once using manually selected time point for remeshing and grid to
+    remesh to. Based on discussion with JAK on Feb. 10, 2021.
+    """
+    remeshed = False
+    k = np.round((grid[2] - grid[1]) / (grid[1] - grid[0])*10)/10
+    if k==1.2:
+        return remeshed, grid, vals
+
+    val_lo = np.min(vals)
+    val_hi = np.max(vals)
+    range = val_hi - val_lo
+    i_diffn = np.where(vals - val_lo >= range*(1-1/np.exp(1)))[0][0]
+    if i_diffn > 1:
+        remeshed = True
+        N = len(grid)
+        R_max = np.max(grid)
+        # reduces the k value by 0.2
+        grid_new = make_r_arr_log(N, R_max, k=k-0.2)
+        grid_new[-1] = grid[-1]
+        f = scipy.interpolate.interp1d(grid, vals, kind='linear')
+        vals_new = f(grid_new)
+        if np.any(vals_new > val_hi):
+            print('interpolation exceeded bulk value')
+            vals_new[vals_new > val_hi] = vals[-1]
+
+        grid = grid_new
+        vals = vals_new
 
     return remeshed, grid, vals
 

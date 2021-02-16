@@ -182,7 +182,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
                     d_tolman=0, tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
                     R_min=0, dcdt_fn=diffn.calc_dcdt_sph_fix_D,
                     time_step_fn=bubble.time_step_dcdr, legacy_mode=False,
-                    grid_fn=diffn.make_r_arr_lin, grid_params={}, adapt_freq=5,
+                    grid_fn=diffn.make_r_arr_lin, grid_params={}, adapt_freq=1,
                     remesh_fn=None, remesh_params={}, remesh_freq=1000):
     """
     Performs numerical computation of Epstein-Plesset model for comparison.
@@ -296,21 +296,19 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
         # first considers remeshing to adapt to changing gradient
         start = time.time()
         if remesh_fn is not None and (len(t_bub)%remesh_freq == 5):
-            print('consider remeshing')
             remeshed, r_arr, c[-1] = remesh_fn(r_arr, c[-1], **remesh_params)
 
             # only saves new grid if it remeshed and is not the first data point
             # (first data point is already saved before this loop)
             if remeshed and len(t_flow) > 1:
                 print('remeshed')
+                print('t', t_bub[-1] - t_nuc)
                 dt_max = update_dt_max(get_dr(r_arr_list[-1]), get_dr(r_arr), dt_max)
                 # ensures new time step is shorter than maximum allowed, o/w
                 # the solution becomes unstable
                 dt = min(dt, dt_max)
                 r_arr_list += [r_arr]
                 r_arr_t_list += [t_flow[-1]]
-
-            print('Time for remeshing = {0:.1f} ms.'.format(1000*(time.time()-start)))
 
         # calculates properties after one time step with updated
         # boundary conditions
@@ -325,11 +323,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
 
         if np.max(c[-1]) > c[-1][-1]:
             print('unstable')
-            print(c[-1])
-            print(r_arr)
-            print(dt_max)
-            dr_min = np.min(np.diff(r_arr))
-            print(0.5*dr_min**2/D)
+            print(np.max(c[-1]))
 
 
     return t_flow, c, t_bub, m, D, p, p_bub, if_tension, c_bub, c_bulk, R, \
