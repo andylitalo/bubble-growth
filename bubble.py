@@ -168,7 +168,8 @@ def grow(t_nuc, dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file,
 
 
 def adaptive_time_step(dt, inputs, args, time_step_fn, tol_R,
-                        alpha, dt_max=None, i_R=-2, legacy_mode=False):
+                        alpha, dt_max=None, i_R=-2, legacy_mode=False,
+                        max_iter=1000):
     """
     Previously incremented time step by alpha after taking the appropriate time
     step, but then the returned time step was larger than the time step taken.
@@ -188,6 +189,7 @@ def adaptive_time_step(dt, inputs, args, time_step_fn, tol_R,
 
     # compares time step with twice the size to ensure discrepancy is within
     # tolerance
+    n_iter = 0
     while True:
         # calculates properties for two time steps
         updated_inputs_a, outputs_a = time_step_fn(dt, inputs, args)
@@ -210,6 +212,9 @@ def adaptive_time_step(dt, inputs, args, time_step_fn, tol_R,
         else:
             # does not advance forward, reduces time step
             dt /= 2
+            n_iter += 1
+            if n_iter >= max_iter:
+                break
 
     return dt, updated_inputs, outputs
 
