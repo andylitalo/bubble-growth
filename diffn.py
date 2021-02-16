@@ -819,7 +819,7 @@ def remesh(grid, vals, th_lo, th_hi, unif_vals=False, second=False):
     return remeshed, grid, vals
 
 
-def remesh_once_manual(grid, vals, i_switch=1, interp_kind='linear', dk=0.2):
+def remesh_once_manual(grid, vals, i_remesh=1, interp_kind='linear', dk=0.2):
     """
     Remeshes once using manually selected time point for remeshing and grid to
     remesh to. Based on discussion with JAK on Feb. 10, 2021.
@@ -833,7 +833,7 @@ def remesh_once_manual(grid, vals, i_switch=1, interp_kind='linear', dk=0.2):
     val_hi = vals[-1]
     range = val_hi - val_lo
     i_diffn = np.where(vals - val_lo >= range*(1-1/np.exp(1)))[0][0]
-    if i_diffn > i_switch:
+    if i_diffn > i_remesh:
         remeshed = True
         N = len(grid)
         R_max = np.max(grid)
