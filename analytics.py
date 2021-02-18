@@ -184,6 +184,12 @@ def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
         t_num = output[i_t_num]
         dr_list = output[i_dr]
 
+        # uses first computation as reference if no reference provided
+        if t_ref is None and R_ref is None:
+            t_ref = t_num
+            R_ref = R
+            continue
+
         raw_vals = (t_ref, R_ref, t_num, R)
         R_diff_list += [calc_diff(*raw_vals)]
 
@@ -194,7 +200,7 @@ def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
 
         comp_time = time.time() - start_time
         comp_time_list += [comp_time]
-        print('Computation time = {0:f} s.'.format(comp_time))
+        print('Computation time = {0:f} s.\n'.format(comp_time))
 
     ret_vals = [R_diff_list, dr_list_list, raw_vals_list]
     if ret_comp_time:
