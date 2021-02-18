@@ -284,7 +284,7 @@ def calc_dmdt(D, p_s, p, R, t, t_nuc, dt, c_s_interp_arrs, tol=1E-9):
     return dmdt
 
 
-def calc_dmdt_dcdr_fix_D(r_arr, c, R, D):
+def calc_dmdt_dcdr_fix_D(r_arr, c, R, D, tol_frac=0.001):
     """
     Calculates the time-derivative of the mass enclosed inside a
     CO2 bubble under the given conditions. The formula is modified
@@ -308,9 +308,18 @@ def calc_dmdt_dcdr_fix_D(r_arr, c, R, D):
     """
     # concentration gradient at interface of bubble [kg/m^3 / m]
     # 2nd-order Taylor scheme
-    # dcdr = fd.dydx_fwd_2nd(c[0], c[1], c[2], r_arr[1] - r_arr[0])
-    dcdr = fd.dydx_non_fwd(np.asarray(c), r_arr)[0] 
-    dmdt = (4*np.pi*R**2*D)*dcdr
+    dr0 = r_arr[1] - r_arr[0]
+    dr1 = r_arr[2] - r_arr[1]
+    # uses higher-order stencil if uniform grid spacing
+    if np.abs( (dr1-dr0)/dr0 ) < dr0*tol_frac:
+        dcdr = fd.dydx_fwd_2nd(c[0], c[1], c[2], r_arr[1] - r_arr[0])
+    # otherwise uses lower-order stencil for non-uniform grid
+    else:
+        dcdr = fd.dydx_non_fwd(np.asarray(c), r_arr)[0]
+    # computes mass transfer rate into bubble by multiplying flux by area
+    flux = D*dcdr
+    area = 4*np.pi*R**2
+    dmdt = flux*area
 
     return dmdt
 
