@@ -308,7 +308,8 @@ def calc_dmdt_dcdr_fix_D(r_arr, c, R, D):
     """
     # concentration gradient at interface of bubble [kg/m^3 / m]
     # 2nd-order Taylor scheme
-    dcdr = fd.dydx_non_fwd(np.asarray(c), r_arr)[0]
+    # dcdr = fd.dydx_fwd_2nd(c[0], c[1], c[2], r_arr[1] - r_arr[0])
+    dcdr = fd.dydx_non_fwd(np.asarray(c), r_arr)[0] 
     dmdt = (4*np.pi*R**2*D)*dcdr
 
     return dmdt
@@ -664,7 +665,7 @@ def time_step_dcdr(dt, inputs, args):
 
     # updates mass with explicit Euler method--inputs are i^th terms,
     # so we pass in R[-1] since R has not been updated to R_{i+1} yet
-    m = m_prev + dt*calc_dmdt_dcdr_fix_D(r_arr, c_arr, R_prev, D) # ***here
+    m = m_prev + dt*calc_dmdt_dcdr_fix_D(r_arr, c_arr, R_prev, D)
 
     # self-consistently solves for radius and pressure of bubble
     R, p_bub = calc_R_p_bub(m, p, R0, p_bub0, if_interp_arrs,
