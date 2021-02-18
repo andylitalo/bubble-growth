@@ -819,14 +819,15 @@ def remesh(grid, vals, th_lo, th_hi, unif_vals=False, second=False):
     return remeshed, grid, vals
 
 
-def remesh_once_manual(grid, vals, i_remesh=1, interp_kind='linear', dk=0.2):
+def remesh_once_manual(grid, vals, i_remesh=1, interp_kind='linear', dk=0.2,
+                        k_min=1.2):
     """
     Remeshes once using manually selected time point for remeshing and grid to
     remesh to. Based on discussion with JAK on Feb. 10, 2021.
     """
     remeshed = False
-    k = np.round((grid[2] - grid[1]) / (grid[1] - grid[0])*10)/10
-    if k==1.2:
+    k = np.round((grid[2] - grid[1]) / (grid[1] - grid[0])*20)/20
+    if k==k_min:
         return remeshed, grid, vals
 
     val_lo = vals[0]

@@ -336,8 +336,8 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac=0.01,
                  if_tension_model='lin', implicit=False, d_tolman=0,
                  tol_R=0.001, alpha=0.3, D=-1, R_i=np.inf,
                  R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
-                 time_step_fn=bubble.time_step_dcdr, grid_fn=diffn.make_r_arr_lin,
-                 grid_params={},
+                 time_step_fn=bubble.time_step_dcdr,
+                 grid_fn=diffn.make_r_arr_lin, grid_params={},
                  remesh_fn=diffn.remesh, remesh_params={}, remesh_freq=25):
     """
     Peforms numerical computation of diffusion into bubble from bulk accounting
@@ -419,7 +419,7 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac=0.01,
                 # ensures new time step is shorter than maximum allowed, o/w
                 # the solution becomes unstable
                 dt = min(dt, dt_max)
-                print(dt, dt_max)
+                print('t', t_flow[-1] - t_nuc, 'dt', dt, 'dt_max', dt_max)
                 r_arr_list += [r_arr]
                 r_arr_t_list += [t_flow[-1]]
 
@@ -438,8 +438,8 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac=0.01,
             rho_co2, v, r_arr_data
 
 
-def sheath_incompressible(t_nuc, eps_params, R_max, N, dc_c_s_frac, R_i,
-                dt_sheath, D_fn=polyco2.calc_D_lin, adaptive_dt=True,
+def sheath_incompressible(t_nuc, eps_params, R_max, N, R_i, dt_sheath,
+                dc_c_s_frac=0.01, D_fn=polyco2.calc_D_lin, adaptive_dt=True,
                 adapt_freq=1, legacy_mode=False, if_tension_model='lin',
                 implicit=False, d_tolman=0, tol_R=0.001, alpha=0.3, D=-1, t_i=0,
                 t_f=None, R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,

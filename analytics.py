@@ -29,6 +29,45 @@ m_2_nm = 1E9
 
 
 
+
+def calc_dcdr_eps_fix_D(N_list, R_max, t_nuc, eps_params, dt_max_list=None):
+    """
+    Calculates concentration gradient at interface of bubble b/w Epstein-Plesset
+    model and numerical model.
+    """
+    # initializes list of numerically computed concentration gradients
+    dcdr_num_list = []
+    # initializes list of times [s]
+    t_num_list = []
+
+    # first performs Epstein-Plesset computation as benchmark
+    t_eps, m, D, p, p_bub, if_tension,\
+    c_s, c_bulk, R, rho_co2 = bubble.grow(t_nuc, *eps_params)
+    # computes concentration gradient at bubble interface
+    dcdr_eps = bubble.calc_dcdr_eps(c_bulk, c_s, R, D, np.asarray(t_eps) - t_nuc)
+
+    # then performs numerical computation for different grid spacings
+    for i, N in enumerate(N_list):
+        if dt_max_list is not None:
+            dt_max = dt_max_list[i]
+        else:
+            dt_max = None
+        # performs simulation
+
+        t_flow, c, t_num, m, D, p, \
+        p_bub, if_tension, c_bub, \
+        c_bulk, R, rho_co2, v, dr_list = bubbleflow.num_fix_D(t_nuc, eps_params, \
+                                                    R_max, N, dt_max=dt_max)
+
+        # uses 2nd-order Taylor stencil
+        dcdr_num_list += [[fd.dydx_fwd_2nd(c[i][0], c[i][1], c[i][2], \
+                                            dr_list[0]) for i in range(len(c))]]
+        # saves list of times [s]
+        t_num_list += [t_num]
+
+    return t_eps, dcdr_eps, t_num_list, dcdr_num_list
+
+
 def calc_diff(t_ref, ref, t, val):
     """
     Calculates the difference in the concentration gradient dc/dr at the
@@ -110,44 +149,6 @@ def compare_dcdr_eps(num_input_list, num_fn_list, t_nuc, eps_params):
     return t_eps, dcdr_diff_list
 
 
-def calc_dcdr_eps_fix_D(N_list, R_max, t_nuc, eps_params, dt_max_list=None):
-    """
-    Calculates concentration gradient at interface of bubble b/w Epstein-Plesset
-    model and numerical model.
-    """
-    # initializes list of numerically computed concentration gradients
-    dcdr_num_list = []
-    # initializes list of times [s]
-    t_num_list = []
-
-    # first performs Epstein-Plesset computation as benchmark
-    t_eps, m, D, p, p_bub, if_tension,\
-    c_s, c_bulk, R, rho_co2 = bubble.grow(t_nuc, *eps_params)
-    # computes concentration gradient at bubble interface
-    dcdr_eps = bubble.calc_dcdr_eps(c_bulk, c_s, R, D, np.asarray(t_eps) - t_nuc)
-
-    # then performs numerical computation for different grid spacings
-    for i, N in enumerate(N_list):
-        if dt_max_list is not None:
-            dt_max = dt_max_list[i]
-        else:
-            dt_max = None
-        # performs simulation
-
-        t_flow, c, t_num, m, D, p, \
-        p_bub, if_tension, c_bub, \
-        c_bulk, R, rho_co2, v, dr_list = bubbleflow.num_fix_D(t_nuc, eps_params, \
-                                                    R_max, N, dt_max=dt_max)
-
-        # uses 2nd-order Taylor stencil
-        dcdr_num_list += [[fd.dydx_fwd_2nd(c[i][0], c[i][1], c[i][2], \
-                                            dr_list[0]) for i in range(len(c))]]
-        # saves list of times [s]
-        t_num_list += [t_num]
-
-    return t_eps, dcdr_eps, t_num_list, dcdr_num_list
-
-
 def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
                     i_R=10, i_t_num=2, i_dr=-1, ret_comp_time=False):
     """
@@ -200,6 +201,65 @@ def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
         ret_vals += [comp_time_list]
 
     return ret_vals
+
+
+# def comp_expmt():
+#     """
+#     Compares model fitted to first measurement of bubble radius to series of
+#     measurements of bubble radius from loaded experimental data measured using
+#     bubble-tracking algorithms (i.e., trackbubble package).
+#     """
+#     # estimates pressure drop down observation capillary from ISCO 260 D [Pa]
+#     p_in = p_260d - flow.p_pois(eta_o, l_tube_o, r_tube_o, Q_o)
+#     # collects relevant parameters
+#     eps_params = (dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file)
+#
+#     #################### DEFINES DIFFUSIVITY FUNCTION ##########################
+#     df_D = pd.read_csv(filepath_D_c)
+#     D0, A_p, k_p = df_D['p']
+#
+#     def D_p(c):
+#         """
+#         Power-law fit for D(c) fitted to *pressurization* data of 1k3f @ 30c
+#         (see 20201124_1k3f_D_vs_rho_co2.ipynb).
+#         """
+#         return D0 + A_p * c**k_p
+#
+#
+#     ########################### FITS GROWTH TO POINT ###########################
+# # fits results to bubble growth model
+# growth_fn = bubbleflow.sheath_incompressible
+# i_t = 2 # index of t_bub in output of growth_fn
+# i_R = 10 # index of R in output of growth_fn
+# sigma_R = 0.03 # tolerance of error in radius
+# # groups arguments for growth model
+# N = 28
+# k = 1.6
+# D_max = D_p(500) # max diffusivity occurs below 500 kg/m^3 [m^2/s]
+# R_max = R_o
+# dt_sheath = 0.5*(R_max/N)**2/D_max
+# args = [eps_params, R_max, N, R_i, dt_sheath]
+# dict_args =
+# i_t_nuc = 0
+#
+# # increases maximum iterations
+# max_iter = 15
+#
+# # bounds on nucleation time
+# t_nuc_lo = 0.04 # [s]
+# t_nuc_hi = 0.0434 # [s]
+#
+# # opens figure to show results of different guesses for bubble nucleation time
+# fig = plt.figure()
+# ax = fig.add_subplot(111)
+#
+# # uses modified shooting method to estimate the nucleation time
+# t_nuc, output = an.fit_growth_to_pt(t_bubble, R_bubbles[0], t_nuc_lo, t_nuc_hi, growth_fn, args,
+#                      i_t_nuc, sigma_R=sigma_R, ax=ax, max_iter=max_iter, i_t=i_t, i_R=i_R, dict_args=dict_args)
+#
+# # unpacks output
+# t_flow, c, t_bub, m, D, p, p_bub, if_tension, c_bub, c_bulk, R, \
+#             rho_co2, v, r_arr_data = output
 
 
 def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
