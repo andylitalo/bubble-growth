@@ -569,10 +569,18 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, R_i, dt_sheath,
         # boundary conditions
         # adds bubble radius R to grid of radii since r_arr starts at bubble
         # interface
+
         props_flow = diffn.time_step(dt, t_flow[-1], r_arr, c[-1], dcdt_fn,
                         bc_specs_list, R[-1], fixed_params_flow)
+
+        if np.any(np.isnan(c[-1])):
+            print('c[0:2]', props_flow[-1][:2])
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t_flow, c)
+
+        if np.any(np.isnan(c[-1])):
+            print('after update')
+            print('c[0:2]', props_flow[-1][:2])
 
     r_arr_data = (r_arr_list, r_arr_t_list)
 
