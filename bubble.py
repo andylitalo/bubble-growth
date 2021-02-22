@@ -72,7 +72,7 @@ def time_step(dt, inputs, args):
 
 
 def grow(t_nuc, dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file,
-         adaptive_dt=True, if_tension_model='lin', implicit=False, d_tolman=0,
+         adaptive_dt=True, if_tension_model='lin', implicit=False, d_tolman=5E-9,
          tol_R=0.001, alpha=0.3, D=-1, time_step_fn=time_step,
          dt_max=None):
     """
@@ -81,6 +81,7 @@ def grow(t_nuc, dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file,
 
     Difference from eps_pless_p_if_4:
         -Uses Tolman length correction of interfacial tension
+        -Adaptive time-stepping
 
     Parameters
     ----------
@@ -192,21 +193,21 @@ def adaptive_time_step(dt, inputs, args, time_step_fn, tol_R,
     n_iter = 0
     while True:
         # calculates properties for two time steps
-        updated_inputs_a, outputs_a = time_step_fn(dt, inputs, args)
+        updated_inputs_a1, outputs_a1 = time_step_fn(dt, inputs, args)
         if not legacy_mode:
             # takes a second step of dt
-            updated_inputs_a, outputs_a = time_step_fn(dt, updated_inputs_a, args)
+            updated_inputs_a2, outputs_a2 = time_step_fn(dt, updated_inputs_a1, args)
 
         # compares to one step twice as large
         updated_inputs_b, outputs_b = time_step_fn(2*dt, inputs, args)
         # extracts estimated value of the radius (index -2 in properties list)
-        R_a = updated_inputs_a[i_R]
+        R_a = updated_inputs_a2[i_R]
         R_b = updated_inputs_b[i_R]
         # checks if the discrepancy in the radius is below tolerance
         if np.abs( (R_a - R_b) / R_a) <= tol_R:
             # takes properties calculated with smaller time step
-            updated_inputs = updated_inputs_a
-            outputs = outputs_a
+            updated_inputs = updated_inputs_a1
+            outputs = outputs_a1
             # breaks loop now that time step met tolerance
             break
         else:
@@ -215,6 +216,7 @@ def adaptive_time_step(dt, inputs, args, time_step_fn, tol_R,
             n_iter += 1
             if n_iter >= max_iter:
                 print('iterations exceeded')
+                print('R_a', R_a, 'R_b', R_b, 'dt', dt)
                 updated_inputs = updated_inputs_a
                 outputs = outputs_a
                 break
