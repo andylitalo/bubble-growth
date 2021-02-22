@@ -56,12 +56,20 @@ def calc_dcdr_eps_fix_D(N_list, R_max, t_nuc, eps_params, dt_max_list=None):
 
         t_flow, c, t_num, m, D, p, \
         p_bub, if_tension, c_bub, \
-        c_bulk, R, rho_co2, v, dr_list = bubbleflow.num_fix_D(t_nuc, eps_params, \
+        c_bulk, R, rho_co2, v, r_arr_data = bubbleflow.num_fix_D(t_nuc, eps_params, \
                                                     R_max, N, dt_max=dt_max)
 
+        r_arr_list, r_arr_t_list = r_arr_data
+        inds_r_arr = [np.where(t >= np.asarray(r_arr_t_list))[0][0] for t in t_flow]
+        # list of grid for r values at each time point
+        r_arr_list = [r_arr_list[i] for i in inds_r_arr]
+        # dr_list = [r_arr_list[i][1] - r_arr_list[i][0] for i in inds_r_arr]
+
         # uses 2nd-order Taylor stencil
-        dcdr_num_list += [[fd.dydx_fwd_2nd(c[i][0], c[i][1], c[i][2], \
-                                            dr_list[0]) for i in range(len(c))]]
+        # dcdr_num = [fd.dydx_fwd_2nd(c[i][0], c[i][1], c[i][2], \
+        #                                     dr_list[i]) for i in range(len(c))]
+        dcdr_num = [fd.dydx_non_fwd(c[i],r_arr_list[i])[0] for i in range(len(c))]
+        dcdr_num_list += [dcdr_num]
         # saves list of times [s]
         t_num_list += [t_num]
 

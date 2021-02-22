@@ -179,7 +179,7 @@ def bc_cap(c_max=0):
 
 def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
                     if_tension_model='lin', implicit=False,
-                    d_tolman=0, tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
+                    d_tolman=5E-9, tol_R=0.001, alpha=0.3, D=-1, dt_max=None,
                     R_min=0, dcdt_fn=diffn.calc_dcdt_sph_fix_D,
                     time_step_fn=bubble.time_step_dcdr, legacy_mode=False,
                     grid_fn=diffn.make_r_arr_lin, grid_params={}, adapt_freq=1,
@@ -250,7 +250,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
                                             d_tolman, implicit)
     # extracts relevant parameters from bubble initiation
     _, D, p_in, p_s, v, L, _, c_s_interp_arrs, \
-    if_interp_arrs, f_rho_co2, d_tolman, _ = fixed_params_tmp
+    if_interp_arrs, f_rho_co2, _, _ = fixed_params_tmp
     # collects parameters relevant for bubble growth
     fixed_params_bub = (D, p_in, p_s, v, L, c_s_interp_arrs, if_interp_arrs,
                         f_rho_co2, d_tolman)
@@ -333,7 +333,7 @@ def num_fix_D(t_nuc, eps_params, R_max, N, adaptive_dt=True,
 def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac=0.01,
                  dt_max=None, D_fn=polyco2.calc_D_lin,
                  adaptive_dt=True, adapt_freq=5, legacy_mode=False,
-                 if_tension_model='lin', implicit=False, d_tolman=0,
+                 if_tension_model='lin', implicit=False, d_tolman=5E-9,
                  tol_R=0.001, alpha=0.3, D=-1, R_i=np.inf,
                  R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
                  time_step_fn=bubble.time_step_dcdr,
@@ -378,6 +378,7 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac=0.01,
     r_arr_list = [r_arr]
     r_arr_t_list = [t_flow[-1]]
 
+    n_steps = 0
     # TIME-STEPPING -- BUBBLE NUCLEATES AND GROWS
     while t_bub[-1] <= t_f:
         # collects parameters for time-stepping method
@@ -432,6 +433,11 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac=0.01,
         # stores properties at new time step in lists
         diffn.update_props(props_flow, t_flow, c)
 
+        n_steps += 1
+        if n_steps % 10000 == 0:
+            print('t', t_flow[-1], 'dt', dt, 'n_steps', n_steps,
+                'dr', r_arr[1] - r_arr[0], 'c_max', np.max(c[-1]), 'c_min', np.min(c[-1]))
+
     r_arr_data = (r_arr_list, r_arr_t_list)
 
     return t_flow, c, t_bub, m, D, p, p_bub, if_tension, c_bub, c_bulk, R, \
@@ -441,7 +447,7 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac=0.01,
 def sheath_incompressible(t_nuc, eps_params, R_max, N, R_i, dt_sheath,
                 dc_c_s_frac=0.01, D_fn=polyco2.calc_D_lin, adaptive_dt=True,
                 adapt_freq=1, legacy_mode=False, if_tension_model='lin',
-                implicit=False, d_tolman=0, tol_R=0.001, alpha=0.3, D=-1, t_i=0,
+                implicit=False, d_tolman=5E-9, tol_R=0.001, alpha=0.3, D=-1, t_i=0,
                 t_f=None, R_min=0, dcdt_fn=diffn.calc_dcdt_sph_vary_D,
                 time_step_fn=bubble.time_step_dcdr,
                 grid_fn=diffn.make_r_arr_lin, grid_params={},
@@ -458,6 +464,10 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, R_i, dt_sheath,
     ***Note: increasing the adapt_freq above 1 (i.e., not adjusting the time
     step each time) can lead to failure if the model undergoes a change
     requiring high time resolution in between calls to adaptive_time_step().
+
+    ***d_tolman MUST be greater than 0 to model nanometer-sized bubbles. 5 nm
+    is suggested based on rule of thumb from Valeriy Ginzburg (a few atomic
+    layers, see 20200608...txt)
     """
     # sets maximum time step as sheath flow time step
     dt_max = dt_sheath
@@ -545,7 +555,6 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, R_i, dt_sheath,
         # first considers coarsening the grid by half if resolution of
         # first considers remeshing to adapt to changing gradient
         if remesh_fn is not None and (len(t_bub)%remesh_freq == 5):
-            print('consider remeshing')
             remeshed, r_arr, c[-1] = remesh_fn(r_arr, c[-1], **remesh_params)
 
             # only saves new grid if it remeshed and is not the first data point
@@ -607,6 +616,8 @@ def update_dt_max(dr_prev, dr, dt_max):
     """
     Updates values of grid spacing dr and maximum time step dt_max.
     """
+    print(dr)
+    print(dr_prev)
     if dt_max is not None:
         dt_max *= (dr / dr_prev)**2
     return dt_max

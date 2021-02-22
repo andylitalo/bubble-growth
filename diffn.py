@@ -853,6 +853,82 @@ def remesh_once_manual(grid, vals, i_remesh=1, interp_kind='linear', dk=0.2,
     return remeshed, grid, vals
 
 
+def remesh_curv(grid, vals, interp_kind='linear', small_val=1):
+    """
+    Remeshes to concentrate points where the curvature is highest.
+
+    Sources
+    -------
+    1. https://www.mathworks.com/matlabcentral/answers/518408-generate-a-mesh-
+    with-unequal-steps-based-on-a-density-function (suggested by C. Balzer)
+    """
+    remeshed = True
+    # even spacing
+    x = np.linspace(grid[0], grid[-1], len(grid))
+    dval = np.max(vals) - np.min(vals)
+    dx = grid[-1] - grid[0]
+    # calculates density of mesh points based on curvature
+    curv = np.abs(fd.d2ydx2_non_1st(vals, grid))/(dval/dx**2)
+    grad = np.abs(fd.dydx_non_1st(np.asarray(vals), np.asarray(grid)))/(dval/dx)
+    rho = np.concatenate((np.array([0]),  curv + grad**6, np.array([0])))
+    # replaces zeros with small values
+    rho[rho <= 1E-3] = small_val
+
+    # computes cumulative density function
+    cdf = np.cumsum(rho)
+    # evenly spaced cumulative density of curvature
+    eq_smpl = np.linspace(cdf[0], cdf[-1], len(cdf))
+
+    # calculates new mesh
+    f_grid = scipy.interpolate.interp1d(cdf, x, kind=interp_kind)
+    grid_new = f_grid(eq_smpl)
+
+    # interpolates corresponding values
+    f_vals = scipy.interpolate.interp1d(grid, vals, kind=interp_kind)
+    vals_new = f_vals(grid_new[1:-1])
+    vals_new = np.concatenate((np.array([vals[0]]), vals_new, np.array([vals[-1]])))
+    # checks that values fit within limits
+    if np.any(vals_new > np.max(vals)):
+        print('interpolation exceeded bulk value')
+        vals_new[vals_new > np.max(vals)] = np.max(vals)
+
+    return remeshed, grid_new, vals_new
+
+
+def remesh_dr(grid, vals, i_remesh=1, interp_kind='linear', dr_mult=2,
+                        dr_max=5E-7):
+    """
+    Remeshes once using manually selected time point for remeshing and grid to
+    remesh to. Based on discussion with JAK on Feb. 10, 2021.
+    """
+    remeshed = False
+    dr = grid[1] - grid[0]
+    if dr > dr_max:
+        return remeshed, grid, vals
+
+    val_lo = vals[0]
+    val_hi = vals[-1]
+    range = val_hi - val_lo
+    i_diffn = np.where(vals - val_lo >= range*(1-1/np.exp(1)))[0][0]
+    if i_diffn > i_remesh:
+        remeshed = True
+        N = len(grid)
+        R_max = np.max(grid)
+        # reduces the k value by fixed value
+        grid_new = make_r_arr_log(N, R_max, dr=dr_mult*dr)
+        grid_new[-1] = grid[-1]
+        f = scipy.interpolate.interp1d(grid, vals, kind=interp_kind)
+        vals_new = f(grid_new)
+        if np.any(vals_new > val_hi):
+            print('interpolation exceeded bulk value')
+            vals_new[vals_new > val_hi] = val_hi
+
+        grid = grid_new
+        vals = vals_new
+
+    return remeshed, grid, vals
+
+
 def time_step(dt, t_prev, r_arr, c_prev, dcdt_fn, bc_specs_list, R, fixed_params,
                 apply_bc_first=True):
     """
