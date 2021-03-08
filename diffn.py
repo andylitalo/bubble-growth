@@ -681,6 +681,20 @@ def neumann(c, i, j, dcdr, r_arr):
     c[i] = dcdr * (r_arr[i] - r_arr[j]) + c[j]
 
 
+def regrid(grid, vals, grid_fn, N, R_max, args, interp_kind):
+    """
+    Interpolates valus over new grid.
+    """
+    print('regridding')
+    # reduces the k value by fixed value
+    grid_new = grid_fn(N, R_max, **args)
+    grid_new[-1] = grid[-1]
+    f = scipy.interpolate.interp1d(grid, vals, kind=interp_kind)
+    vals_new = f(grid_new)
+
+    return grid_new, vals_new
+
+
 def remesh(grid, vals, th_lo, th_hi, unif_vals=False, second=False):
     """
     Creates a new mesh (and interpolates a new set of function values) to
@@ -838,11 +852,8 @@ def remesh_once_manual(grid, vals, i_remesh=1, interp_kind='linear', dk=0.2,
         remeshed = True
         N = len(grid)
         R_max = np.max(grid)
-        # reduces the k value by fixed value
-        grid_new = make_r_arr_log(N, R_max, k=k-dk)
-        grid_new[-1] = grid[-1]
-        f = scipy.interpolate.interp1d(grid, vals, kind=interp_kind)
-        vals_new = f(grid_new)
+        args = {'k' : k-dk}
+        grid_new, vals_new = regrid(grid, vals, make_r_arr_log, N, R_max, args, interp_kind)
         if np.any(vals_new > val_hi):
             print('interpolation exceeded bulk value')
             vals_new[vals_new > val_hi] = val_hi
@@ -866,7 +877,7 @@ def remesh_curv(grid, vals, interp_kind='linear', small_val=1):
     # even spacing
     x = np.linspace(grid[0], grid[-1], len(grid))
     dval = np.max(vals) - np.min(vals)
-    dx = grid[-1] - grid[0]
+    dx = (x[-1] - x[0]) / len(x) # approximate scale for grid spacing
     # calculates density of mesh points based on curvature
     curv = np.abs(fd.d2ydx2_non_1st(vals, grid))/(dval/dx**2)
     grad = np.abs(fd.dydx_non_1st(np.asarray(vals), np.asarray(grid)))/(dval/dx)

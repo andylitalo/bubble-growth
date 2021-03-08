@@ -15,6 +15,9 @@ sys.path.append('../libs/')
 import numpy as np
 import time
 
+# TODO remove***
+import matplotlib.pyplot as plt
+
 # imports custom libraries
 import bubble
 import diffn
@@ -478,6 +481,7 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, R_i, dt_sheath,
     t_flow, c, r_arr, _, _, \
     t_L, fixed_params = diffn.init_sub(R_min, R_i, R_max, N, L, v, p_s,
                                         dc_c_s_frac, polyol_data_file, t_i=t_i)
+
     if t_f is None:
         t_f = t_L
     dc, interp_arrs = fixed_params
@@ -513,6 +517,17 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, R_i, dt_sheath,
     # TIME-STEPPING -- BUBBLE NUCLEATES AND GROWS
     while t_flow[-1] <= t_f:
 
+        # print('c, rho_co2, t, R, m', c[-1][0], rho_co2[-1], t_flow[-1], R[-1], m[-1])
+        # plots concentration profile when mass begins to decrease
+        if len(m) > 1 and m[-1] < m[-2]:
+            print('mass in bubble decreased--density higher than bulk')
+            fig = plt.figure()
+            ax = fig.add_subplot(111)
+            ax.plot(r_arr*1E6, c[-1], '^')
+            # ax.set_xscale('log')
+            # ax.set_xlim([1E-3, 150])
+            print('rho_co2', rho_co2[-1])
+            break
         # prints out progress
         if t_flow[-1] >= ctr/10*t_f:
             print('{0:d}% complete, t = {1:.3f} ms.'.format(10*ctr, t_flow[-1]*s_2_ms))
@@ -521,9 +536,24 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, R_i, dt_sheath,
         ########### BUBBLE GROWTH #########
         # only grows bubble if past nucleation time
         if t_flow[-1] >= t_nuc:
-            # first time step should be the one from the Epstein-Plesset params
-            if t_flow[-1] - dt < t_nuc:
+            just_nucleated = t_flow[-1] - dt < t_nuc
+            if just_nucleated:
+                # first time step should be the one from the Epstein-Plesset params
                 dt = dt0
+                # remesh to resolve bubble interface
+                r_arr, c[-1] = diffn.regrid(r_arr, c[-1], grid_fn, N, R_max, grid_params,
+                                            remesh_params['interp_kind'])
+                # incorporates results more broadly
+                dt_max = update_dt_max(get_dr(r_arr_list[-1]), get_dr(r_arr), dt_max)
+                # ensures new time step is shorter than maximum allowed, o/w
+                # the solution becomes unstable
+                dt = min(dt, dt_max)
+                r_arr_list += [r_arr]
+                r_arr_t_list += [t_flow[-1]]
+
+            if rho_co2[-1] > 500:
+                print('warning: carbon dioxide in bubble is liquid-like; rho = {0:.1f} kg/m^3'.format(rho_co2[-1]))
+
             # collects parameters for time-stepping method
             D += [D_fn(c_bub[-1])]
             fixed_params_bub = (D[-1], p_in, p_s, v, L, c_s_interp_arrs,
@@ -554,13 +584,27 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, R_i, dt_sheath,
         ######### SHEATH FLOW #############
         # first considers coarsening the grid by half if resolution of
         # first considers remeshing to adapt to changing gradient
-        if remesh_fn is not None and (len(t_bub)%remesh_freq == 5):
+        if remesh_fn is not None and (len(t_bub)%remesh_freq == 0) and \
+                                                            not just_nucleated:
+            if t_flow[-1] > t_nuc:
+                fig = plt.figure()
+                ax = fig.add_subplot(111)
+                ax.plot(r_arr*1E6, c[-1], '^')
+                ax.set_xscale('log')
+                ax.set_xlim([1E-3, 150])
+                ax.set_title('before remeshing')
             remeshed, r_arr, c[-1] = remesh_fn(r_arr, c[-1], **remesh_params)
-
+            if t_flow[-1] > t_nuc:
+                fig = plt.figure()
+                ax = fig.add_subplot(111)
+                ax.plot(r_arr*1E6, c[-1], '^')
+                ax.set_xscale('log')
+                ax.set_xlim([1E-3, 150])
+                ax.set_title('after remeshing')
+                print(r_arr)
             # only saves new grid if it remeshed and is not the first data point
             # (first data point is already saved before this loop)
             if remeshed and len(t_flow) > 1:
-                print('remeshed')
                 dt_max = update_dt_max(get_dr(r_arr_list[-1]), get_dr(r_arr), dt_max)
                 # ensures new time step is shorter than maximum allowed, o/w
                 # the solution becomes unstable
@@ -604,9 +648,6 @@ def update_dr_dt(dr, r_arr, dt_max):
     dr_new = np.min(np.diff(r_arr))
     if dt_max is not None:
         print('update dt_max')
-        print(dt_max)
-        print(dr_new)
-        print(dr)
         dt_max *= (dr_new / dr)**2
 
     return dr_new, dt_max
@@ -616,8 +657,6 @@ def update_dt_max(dr_prev, dr, dt_max):
     """
     Updates values of grid spacing dr and maximum time step dt_max.
     """
-    print(dr)
-    print(dr_prev)
     if dt_max is not None:
         dt_max *= (dr / dr_prev)**2
     return dt_max
