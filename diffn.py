@@ -238,7 +238,7 @@ def calc_dcdt_sph_fix_D_nonuniform(xi_arr, c_arr, R, D):
     return dcdt
 
 
-def calc_dcdt_sph_vary_D(xi_arr, c_arr, R, dc, D_fn):
+def calc_dcdt_sph_vary_D(xi_arr, c_arr, R, fixed_params):
     """
     Computes the time derivative of concentration dc/dt in spherical
     coordinates assuming concentration-dependent diffusivity.
@@ -270,6 +270,7 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, R, dc, D_fn):
         (the concentrations at the end points at i=0 and i=N+1 are computed by
         the boundary conditions)
     """
+    dc, D_fn, R_i, eta_ratio = fixed_params
     r_arr = xi_arr + R
     # and their corresponding radii
     r_arr_c = r_arr[1:-1]
@@ -279,6 +280,8 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, R, dc, D_fn):
     c_arr_c = c_arr[1:-1]
     # computes diffusivity constant at each point on grid [m^2/s]
     D_arr = np.asarray([D_fn(c) for c in c_arr_c])
+    # adjusts diffusivity of outer stream based on viscosity ratio
+    D_arr[xi_arr[1:-1] >= R_i] *= eta_ratio
 
     # FIRST TERM: 2/r * D(c) * dc/dr
     # computes spatial derivative of concentration dc/dr with central difference
@@ -302,7 +305,7 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, R, dc, D_fn):
     return dcdt
 
 
-def calc_dcdt_sph_vary_D_nonuniform(xi_arr, c_arr, R, dc, D_fn):
+def calc_dcdt_sph_vary_D_nonuniform(xi_arr, c_arr, R, fixed_params):
     """
     Computes the time derivative of concentration dc/dt in spherical
     coordinates assuming concentration-dependent diffusivity.
@@ -325,8 +328,6 @@ def calc_dcdt_sph_vary_D_nonuniform(xi_arr, c_arr, R, dc, D_fn):
         radius of bubble [m]
     dc : float
         step size in concentration dimension [kg/m^3]
-    interp_arrs : tuple of numpy arrays
-        numpy arrays for interpolation
 
     Returns
     -------
@@ -335,6 +336,7 @@ def calc_dcdt_sph_vary_D_nonuniform(xi_arr, c_arr, R, dc, D_fn):
         (the concentrations at the end points at i=0 and i=N+1 are computed by
         the boundary conditions)
     """
+    dc, D_fn, R_i, eta_ratio = fixed_params
     r_arr = xi_arr + R
     # and their corresponding radii
     r_arr_c = r_arr[1:-1]
@@ -344,7 +346,8 @@ def calc_dcdt_sph_vary_D_nonuniform(xi_arr, c_arr, R, dc, D_fn):
     c_arr_c = c_arr[1:-1]
     # computes diffusivity constant at each point on grid [m^2/s]
     D_arr = np.asarray([D_fn(c) for c in c_arr_c])
-
+    # scales diffusivity of outer stream by ratio of diffusivities, eta_i/eta_o
+    D_arr[xi_arr[1:-1] >= R_i] *= eta_ratio
     # FIRST TERM: 2/r * D(c) * dc/dr
     # computes spatial derivative of concentration dc/dr with central difference
     dcdr_arr = fd.dydx_non_1st(c_arr, r_arr)
@@ -501,7 +504,7 @@ def halve_grid(arr):
     return arr[::2]
 
 
-def manage_grid_halving(r_arr, c_arr, pts_per_grad):
+def manage_grid_halving(r_arr, c_arr, pts_per_grad, interp_kind=None):
     """
     Manages halving of grid by checking if the gradient is resolved by a
     sufficient number of grid points and, if not, halving the grid (decimating
@@ -993,7 +996,7 @@ def time_step(dt, t_prev, r_arr, c_prev, dcdt_fn, bc_specs_list, R, fixed_params
     c_prev_arr = np.asarray(c_prev)
 
     # updates concentration with explicit Euler method
-    c_curr_arr = c_prev_arr[1:-1] + dt*dcdt_fn(r_arr, c_prev_arr, R, *fixed_params)
+    c_curr_arr = c_prev_arr[1:-1] + dt*dcdt_fn(r_arr, c_prev_arr, R, fixed_params)
     # adds end points for the application of the boundary conditions
     c_curr = [0] + list(c_curr_arr) + [0]
 
