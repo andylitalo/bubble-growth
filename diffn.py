@@ -238,7 +238,7 @@ def calc_dcdt_sph_fix_D_nonuniform(xi_arr, c_arr, R, D):
     return dcdt
 
 
-def calc_dcdt_sph_vary_D(xi_arr, c_arr, R, fixed_params):
+def calc_dcdt_sph_vary_D(xi_arr, c_arr, R, fixed_params, tol=1E-10):
     """
     Computes the time derivative of concentration dc/dt in spherical
     coordinates assuming concentration-dependent diffusivity.
@@ -278,8 +278,15 @@ def calc_dcdt_sph_vary_D(xi_arr, c_arr, R, fixed_params):
     dr = r_arr[1] - r_arr[0]
     # and the corresponding concentrations
     c_arr_c = c_arr[1:-1]
+
+    # ensures fluctuations in c below 0 are removed
+    if np.any(c_arr_c < 0):
+        inds_tol = [i for i in range(len(c_arr_c)) if c_arr_c[i] < 0 and c_arr_c[i] > -tol]
+        c_arr_c[inds_tol] = 0
+
     # computes diffusivity constant at each point on grid [m^2/s]
     D_arr = np.asarray([D_fn(c) for c in c_arr_c])
+
     # adjusts diffusivity of outer stream based on viscosity ratio
     D_arr[xi_arr[1:-1] >= R_i] *= eta_ratio
 
@@ -997,6 +1004,11 @@ def time_step(dt, t_prev, r_arr, c_prev, dcdt_fn, bc_specs_list, R, fixed_params
 
     # updates concentration with explicit Euler method
     c_curr_arr = c_prev_arr[1:-1] + dt*dcdt_fn(r_arr, c_prev_arr, R, fixed_params)
+
+    ### DELETE
+    if np.any(np.isnan(dcdt_fn(r_arr, c_prev_arr, R, fixed_params))):
+        print('dcdt has a nan')
+
     # adds end points for the application of the boundary conditions
     c_curr = [0] + list(c_curr_arr) + [0]
 

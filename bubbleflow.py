@@ -372,7 +372,8 @@ def num_vary_D(t_nuc, eps_params, R_max, N, dc_c_s_frac=0.01,
     if_interp_arrs, f_rho_co2, d_tolman, _ = fixed_params_tmp
 
     # fixes parameters for flow
-    fixed_params_flow = (dc, D_fn)
+    # last two params are placeholders for R_i, eta_ratio used in sheath_incompressible
+    fixed_params_flow = (dc, D_fn, R_max, 1)
     # initializes list of diffusivities
     D = [D]
     # creates mesh grid
@@ -642,8 +643,10 @@ def sheath_incompressible(t_nuc, eps_params, R_max, N, R_i, dt_sheath,
         diffn.update_props(props_flow, t_flow, c)
 
         if np.any(np.isnan(c[-1])):
+            print('nan in c[-1]')
             print('after update')
             print('c[0:2]', props_flow[-1][:2])
+            break
 
     r_arr_data = (r_arr_list, r_arr_t_list)
 
