@@ -351,6 +351,12 @@ def calc_dcdt_sph_vary_D_nonuniform(xi_arr, c_arr, R, fixed_params):
     dr = r_arr[1] - r_arr[0]
     # and the corresponding concentrations
     c_arr_c = c_arr[1:-1]
+
+    # ensures fluctuations in c below 0 are removed
+    if np.any(c_arr_c < 0):
+        inds_tol = [i for i in range(len(c_arr_c)) if c_arr_c[i] < 0 and c_arr_c[i] > -tol]
+        c_arr_c[inds_tol] = 0
+
     # computes diffusivity constant at each point on grid [m^2/s]
     D_arr = np.asarray([D_fn(c) for c in c_arr_c])
     # scales diffusivity of outer stream by ratio of diffusivities, eta_i/eta_o
