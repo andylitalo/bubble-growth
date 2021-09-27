@@ -1,8 +1,0 @@
-1k3f_30c.csv comes from G-ADSA data.
-1k3f_22c.csv comes from PC-SAFT and DFT predictions using parameters fit to 1k3f_30c.csv and 1k3f_60c.csv data (by hand, so it's a crude fit but reasonable) and the diffusivity comes from interpolating values from 1k3f_30c.csv since temperature has a small effect on the diffusivity. I also added a row at the beginning for p = 0 with the same values as at p = 100 kPa to assist with interpolation for small values of p. The columns "co2 density [g/mL]" and before are processed using extract_dft_predictions.ipynb jupyter notebook in the g-adsa folder.
-
-
-IMPROVING BUBBLEFLOW.NUMERICAL_EPS_PLESS_FIX_D()
--More precise computation of dc/dr by having a logarithmically spaced mesh (this will require rewriting all of the finite difference formulas)
-
-20201124_diffn_matching.ipynb was broken up into diffn_model_task#.ipynb, for tasks 1, 1a, 2, and 3.
