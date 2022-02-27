@@ -15,7 +15,6 @@ sys.path.append('../libs/')
 import numpy as np
 import time
 
-# TODO remove***
 import matplotlib.pyplot as plt
 
 # imports custom libraries

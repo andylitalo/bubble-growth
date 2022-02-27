@@ -52,8 +52,8 @@ def calc_dcdr_eps_fix_D(N_list, R_max, t_nuc, eps_params, dt_max_list=None):
             dt_max = dt_max_list[i]
         else:
             dt_max = None
-        # performs simulation
 
+        # performs simulation
         t_flow, c, t_num, m, D, p, \
         p_bub, if_tension, c_bub, \
         c_bulk, R, rho_co2, v, r_arr_data = bubbleflow.num_fix_D(t_nuc, eps_params, \
@@ -276,6 +276,24 @@ def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
 #             rho_co2, v, r_arr_data = output
 
 
+def compute_rms_err(t_bub, R_bub, output):
+    """
+    Computes mean-squared *fractional* error of predicted bubble growth
+    from measured growth (radius [m]).
+    """
+    # extracts fitted data
+    t_fit = output[0] # [s]
+    R_fit = output[-2] # [m]
+    # estimates corresponding fitted values
+    R_interp = np.interp(t_bub, t_fit, R_fit)
+    # fractional error
+    err_frac = (R_interp - R_bub) / R_bub
+    # takes root mean square
+    rms_err = np.sqrt(np.sum(err_frac**2)) / len(err_frac)
+    
+    return rms_err
+    
+
 def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
                      i_t_nuc, sigma_R=0.01, ax=None, max_iter=12, i_t=0,
                      i_R=8, dict_args={}):
@@ -302,7 +320,9 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
     i_bubble = next(i for i in range(len(t)) if t[i] >= t_bubble)
     R_bubble_pred = R[i_bubble]
     if R_bubble_pred < R_bubble:
-        print('Predicted bubble radius is smaller than fit for lowest nucleation time. Terminating early.')
+        print('Predicted bubble radius {0:.1f} um'.format(R_bubble_pred*m_2_um)\
+            + ' is smaller than fit value {0:.1f} um'.format(R_bubble*m_2_um) \
+            + ' for lowest nucleation time. Terminating early.')
         return t_nuc_lo, output
 
     # computes error in using lowest nucleation time

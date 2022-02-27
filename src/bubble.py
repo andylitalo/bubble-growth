@@ -146,7 +146,6 @@ def grow(t_nuc, dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file,
                                             v, L, D, polyol_data_file,
                                             eos_co2_file, if_tension_model,
                                             d_tolman, implicit)
-
     # applies Euler's method to estimate bubble growth over time
     # the second condition provides cutoff for shrinking the bubble
     while t[-1] <= t_f:
