@@ -2,3 +2,6 @@
 *.pyc
 *.png
 *checkpoint.ipynb
+*.sh
+*.svg
+*.jpg
