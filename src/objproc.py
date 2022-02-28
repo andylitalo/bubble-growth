@@ -20,12 +20,12 @@ from conversions import *
 def calc_L(obj):
     """
     Calculates the length of the object at all observation points [um].
-    
+
     Parameters
     ----------
     obj : dictionary
         TrackedObj converted to dictionary from bubbletracking_koe
-    
+
     Returns
     -------
     L_list : list of floats
@@ -37,14 +37,14 @@ def calc_L(obj):
     pix_per_um = obj['metadata']['pix_per_um']
     # computes length
     L_list = [(c_hi - c_lo)/pix_per_um for _, c_lo, _, c_hi in bbox_list]
-    
+
     return L_list
 
 
 def calc_t(obj, d, v_max):
     """
     Computes time since entering observation capillary [s].
-    
+
     Parameters
     ----------
     obj : dictionary
@@ -53,36 +53,36 @@ def calc_t(obj, d, v_max):
         Distance along observation capillary at which video was taken [m].
     v_max : float
         Estimated speed of flow at center (maximum) [m/s].
-        
+
     Returns
     -------
     t : numpy array of floats
         Estimated time since flow entered observation capillary of each
-        observation of the object [s].        
+        observation of the object [s].
     """
     # gets timeline of bubble (starts at zero) [s]
     frame_list = obj['props_raw']['frame']
     fps = obj['metadata']['fps']
-    t_fov = (np.asarray(frame_list) - frame_list[0]) / fps 
+    t_fov = (np.asarray(frame_list) - frame_list[0]) / fps
     # computes time of first observation relative to center of field of view
     num_col_frame = obj['metadata']['frame_dim'][1] # number of columns in frame
     pix_per_um = obj['metadata']['pix_per_um'] # conversion factor
     col_first_obs = obj['props_raw']['bbox'][0][1] # row_lo, *col_lo*, row_hi, col_hi
     # distance along capy of first observation [m]
-    d_first_obs = d + ((col_first_obs - num_col_frame/2) / pix_per_um) * um_2_m 
+    d_first_obs = d + ((col_first_obs - num_col_frame/2) / pix_per_um) * um_2_m
     t_first_obs = d_first_obs / v_max
     # adds field-of-view time to time of first observation [s]
     t = t_fov + t_first_obs
-        
+
     return t
 
-        
+
 def calc_W(obj):
     # computes width [um]
     bbox_list = obj['props_raw']['bbox']
     pix_per_um = obj['metadata']['pix_per_um']
     W_list = [(r_hi - r_lo)/pix_per_um for r_lo, _, r_hi, _ in bbox_list]
-    
+
     return W_list
 
 
@@ -106,8 +106,34 @@ def get_conditions(metadata):
         p_sat *= psi_2_Pa
     else:
         print('Units "{0:s}" not recognized.'.format(units))
-        
-    return p_sat, p_est, d, polyol
+
+    L = metadata['L'] # length of observation capillary [m]
+    p_in = -metadata['object_kwargs']['dp'] # inlet pressure est w flow eqns [Pa]
+    v_max = metadata['object_kwargs']['v_max'] # centerline speed [m/s] est w flow eqns
+
+    # computes time to reach center of field of view
+    t_center = d / v_max
+
+    return p_in, p_sat, p_est, p_in, d, L, v_max, t_center, polyol
+
+
+def get_valid_idx(obj, L_frac=1):
+    """
+    Gets indices of frames where object has valid
+    properties for fitting early growth, meaning
+    the object is not on the border and is not too
+    oblong.
+    """
+    # gets bubble size [um]
+    # W_bub = np.asarray(calc_W(obj))
+    L_bub = np.asarray(calc_L(obj))
+    # gets valid indices (eliminates where on border or where bubble is too long
+    not_on_border = np.logical_not(np.asarray(obj['props_raw']['on border']))
+    R_i = obj['metadata']['R_i']*m_2_um # [um]
+    not_too_long = L_bub < 2*R_i * L_frac
+    idx = np.logical_and(not_on_border, not_too_long)
+
+    return idx
 
 
 def is_true_obj(obj, true_props=['inner stream', 'oriented', 'consecutive', 'exited', 'centered']):
@@ -121,5 +147,5 @@ def is_true_obj(obj, true_props=['inner stream', 'oriented', 'consecutive', 'exi
         except:
             print('DATA ARE MISSING TRUE PROPERTIES. Please rerun analysis.')
             continue
-        
-    return True 
+
+    return True
