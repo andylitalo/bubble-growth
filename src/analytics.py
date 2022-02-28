@@ -7,23 +7,26 @@ analytics.py contains functions used for analysis of bubble-growth models.
 @author: Andy
 """
 
-import sys
-sys.path.append('../libs/')
-
-import numpy as np
-import matplotlib.pyplot as plt
+# standard libraries
+import os
+import pickle as pkl
 import time
 
+# 3rd party libraries
+import numpy as np
+import matplotlib.pyplot as plt
+
 # imports custom libraries
+import objproc as op
 import bubble
 import bubbleflow
+# from libs library
+import sys
+sys.path.append('../libs/')
 import finitediff as fd
+import plot.bubble as pltb
+from conversions import *
 
-# CONVERSIONS
-s_2_us = 1E6
-s_2_ms = 1E3
-m_2_um = 1E6
-m_2_nm = 1E9
 
 ########################### FUNCTION DEFINITIONS ##############################
 
@@ -157,6 +160,23 @@ def compare_dcdr_eps(num_input_list, num_fn_list, t_nuc, eps_params):
     return t_eps, dcdr_diff_list
 
 
+def calc_exp_ratio(t_nuc, t_fit, R_fit, t_meas, R_meas):
+    """
+    Calculates ratio of exponents of power-law fit for fitted model and measured data.
+    """
+    assert len(t_fit) > 1 and len(R_fit) > 1, 'Requires at least two fit points. One or fewer provided.'
+    # removes nucleation point at the beginning
+    t_fit = t_fit[1:]
+    R_fit = R_fit[1:]
+    assert np.min(t_meas) > t_nuc and np.min(t_fit) > t_nuc, 'Nucleation time must be before times provided.'
+    # computes ratio
+    exp_fit, _ = np.polyfit( np.log(t_fit - t_nuc), np.log(R_fit), 1 )
+    exp_meas, _ = np.polyfit( np.log(t_meas - t_nuc), np.log(R_meas), 1 )
+    exp_ratio = exp_fit / exp_meas
+
+    return exp_ratio
+
+
 def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
                     i_R=10, i_t_num=2, i_dr=-1, ret_comp_time=False):
     """
@@ -217,90 +237,318 @@ def compare_R(num_input_list, num_fn_list, t_ref, R_ref,
     return ret_vals
 
 
-# def comp_expmt():
-#     """
-#     Compares model fitted to first measurement of bubble radius to series of
-#     measurements of bubble radius from loaded experimental data measured using
-#     bubble-tracking algorithms (i.e., trackbubble package).
-#     """
-#     # estimates pressure drop down observation capillary from ISCO 260 D [Pa]
-#     p_in = p_260d - flow.p_pois(eta_o, l_tube_o, r_tube_o, Q_o)
-#     # collects relevant parameters
-#     eps_params = (dt, p_s, R_nuc, L, p_in, v, polyol_data_file, eos_co2_file)
-#
-#     #################### DEFINES DIFFUSIVITY FUNCTION ##########################
-#     df_D = pd.read_csv(filepath_D_c)
-#     D0, A_p, k_p = df_D['p']
-#
-#     def D_p(c):
-#         """
-#         Power-law fit for D(c) fitted to *pressurization* data of 1k3f @ 30c
-#         (see 20201124_1k3f_D_vs_rho_co2.ipynb).
-#         """
-#         return D0 + A_p * c**k_p
-#
-#
-#     ########################### FITS GROWTH TO POINT ###########################
-# # fits results to bubble growth model
-# growth_fn = bubbleflow.sheath_incompressible
-# i_t = 2 # index of t_bub in output of growth_fn
-# i_R = 10 # index of R in output of growth_fn
-# sigma_R = 0.03 # tolerance of error in radius
-# # groups arguments for growth model
-# N = 28
-# k = 1.6
-# D_max = D_p(500) # max diffusivity occurs below 500 kg/m^3 [m^2/s]
-# R_max = R_o
-# dt_sheath = 0.5*(R_max/N)**2/D_max
-# args = [eps_params, R_max, N, R_i, dt_sheath]
-# dict_args =
-# i_t_nuc = 0
-#
-# # increases maximum iterations
-# max_iter = 15
-#
-# # bounds on nucleation time
-# t_nuc_lo = 0.04 # [s]
-# t_nuc_hi = 0.0434 # [s]
-#
-# # opens figure to show results of different guesses for bubble nucleation time
-# fig = plt.figure()
-# ax = fig.add_subplot(111)
-#
-# # uses modified shooting method to estimate the nucleation time
-# t_nuc, output = an.fit_growth_to_pt(t_bubble, R_bubbles[0], t_nuc_lo, t_nuc_hi, growth_fn, args,
-#                      i_t_nuc, sigma_R=sigma_R, ax=ax, max_iter=max_iter, i_t=i_t, i_R=i_R, dict_args=dict_args)
-#
-# # unpacks output
-# t_flow, c, t_bub, m, D, p, p_bub, if_tension, c_bub, c_bulk, R, \
-#             rho_co2, v, r_arr_data = output
+def calc_rms_excess(t_nuc, t_fit, R_fit, t_bub, R_bub):
+    """
+    Calculates excess RMS error beyond that of power-law fit from
+    `calc_rms_power_law`.
+    """
+    # calculates RMS error of data itself from power-law fit
+    rms_data = calc_rms_power_law(t_nuc, t_bub, R_bub)
+    # computes rms of fit
+    rms_err = calc_rms_err(t_bub, R_bub, t_fit, R_fit)
+    # subtracts to compute excess RMS error
+    rms_excess = rms_err - rms_data
+
+    return rms_excess
 
 
-def compute_rms_err(t_bub, R_bub, output):
+def calc_rms_power_law(t_nuc, t_meas, R_meas):
+    """
+    Calculates the root-mean-square error of a power-law fit to the data.
+    """
+    assert np.min(t_meas) > t_nuc, 'Nucleation time must be less than times of measurement.'
+    # calculates RMS of data
+    a, b = np.polyfit( np.log(t_meas - t_nuc), np.log(R_meas), 1 )
+    R_power_law = np.exp(b) * (t_meas - t_nuc)**a
+    rms_data = calc_rms_err(t_meas, R_power_law, t_meas, R_meas)
+
+    return rms_data
+
+
+def calc_rms_err(t_meas, R_meas, t_pred, R_pred):
     """
     Computes mean-squared *fractional* error of predicted bubble growth
     from measured growth (radius [m]).
     """
-    # extracts fitted data
-    t_fit = output[0] # [s]
-    R_fit = output[-2] # [m]
     # estimates corresponding fitted values
-    R_interp = np.interp(t_bub, t_fit, R_fit)
+    R_interp = np.interp(t_meas, t_pred, R_pred)
     # fractional error
-    err_frac = (R_interp - R_bub) / R_bub
+    err_frac = (R_interp - R_meas) / R_meas
     # takes root mean square
-    rms_err = np.sqrt(np.sum(err_frac**2)) / len(err_frac)
-    
-    return rms_err
-    
+    err = np.sqrt(np.sum(err_frac**2)) / len(err_frac)
+
+    return err
+
+
+def calc_sgn_mse(t_meas, R_meas, t_pred, R_pred):
+    """
+    Computes sum of signed squared error and takes mean.
+    """
+    # estimates corresponding fitted values
+    R_interp = np.interp(t_meas, t_pred, R_pred)
+    # fractional error
+    err_frac = (R_interp - R_meas) / R_meas
+    # signed summation
+    sgn_sum = np.sum(np.sign(err_frac) * err_frac**2)
+    # computes mean signed squared error
+    err = np.sign(sgn_sum) * np.sqrt(np.abs(sgn_sum)) / len(err_frac)
+
+    return err
+
+
+def calc_abs_sgn_mse(t_meas, R_meas, t_pred, R_pred):
+    """
+    Computes absolute value of signed MSE from `calc_sgn_mse`.
+    """
+    return np.abs(calc_sgn_mse(t_meas, R_meas, t_pred, R_pred))
+
+
+def fit_growth_to_pts(t_meas, R_meas, t_nuc_lo, t_nuc_hi, growth_fn, args,
+                     i_t_nuc, err_fn=calc_abs_sgn_mse, err_tol=0.003, ax=None,
+                     max_iter=15, i_t=0, i_R=8, dict_args={}, x_lim=None,
+                     y_lim=None, t_fs=18, ax_fs=16, tk_fs=14):
+    """
+    Finds a suitable model of bubble growth that fits measured bubble radius at
+    many time points.
+    """
+    # inserts place-holder (0) for nucleation time in arguments list
+    args.insert(i_t_nuc, 0)
+    # initializes plot to show the trajectories of different guesses
+    if ax is not None:
+        ax.plot(t_bubble*s_2_ms, R_bubble*m_2_um, 'g*', ms=12, label='fit pt')
+
+    # initializes counter of number of iterations
+    n_iter = 0
+
+    # computes bubble growth trajectory with lowest nucleation time
+    args[i_t_nuc] = t_nuc_lo
+    output = growth_fn(*tuple(args), **dict_args)
+    t = output[i_t]
+    R = output[i_R]
+
+    # ends fitting if maximum predictions all below minimum measured values
+    R_pred = np.interp(t_meas, t, R)
+    if np.sum(np.sign(R_pred - R_meas)) / len(R_pred) == -1:
+        print('Predicted bubble radii are all smaller than measured values' + \
+              ' for lowest nucleation time. Terminating early.')
+        return t_nuc_lo, output
+
+    # computes error
+    err = err_fn(t_meas, R_meas, t, R)
+
+    # bisection algorithm searches for nucleation time yielding accurate R
+    while err > err_tol:
+        # calculates new nucleation time as middle of the two bounds (bisection algorithm)
+        t_nuc = (t_nuc_lo + t_nuc_hi)/2
+        # computes bubble growth trajectory with new bubble nucleation time
+        args[i_t_nuc] = t_nuc
+        output = growth_fn(*tuple(args), **dict_args)
+        # extracts time and radius of bubble growth trajectory from output
+        t = output[i_t] # [s]
+        R = output[i_R] # [m]
+
+        # computes error
+        err = err_fn(t_meas, R_meas, t, R)
+
+        # determines whether to increase or decrease next nucleation time guess
+        sgn_mse = calc_sgn_mse(t_meas, R_meas, t, R)
+        # predicted bubble radius too large means nucleation time is too early,
+        # so we raise the lower bound
+        if sgn_mse > 0:
+            t_nuc_lo = t_nuc
+        # otherwise, nucleation time is too late, so we lower the upper bound
+        else:
+            t_nuc_hi = t_nuc
+
+        print('t_nuc = {0:.3f} ms. Error is {1:.4f} and tol is {2:.4f}.' \
+                .format(t_nuc*s_2_ms, err, err_tol))
+
+        # plots the guessed growth trajectory
+        if ax is not None:
+            ax.plot(np.array(t)*s_2_ms, np.array(R)*m_2_um,
+                    label=r'$t_{nuc}=$' + '{0:.3f} ms'.format(t_nuc*s_2_ms))
+
+        n_iter += 1
+        if n_iter == max_iter:
+            print('Max iterations {0:d} reached. Error above tolerance {1:.4f}'\
+                    .format(max_iter, err_tol))
+            print('Nucleation time is {0:.3f} ms.'.format(t_nuc*s_2_ms))
+            break
+
+    if n_iter < max_iter:
+        print('Error {0:.4f} is below tolerance of {1:.4f}'.format(err, err_tol) + \
+                ' for nucleation time t = {0:.3f} ms'.format(t_nuc*s_2_ms))
+    if ax is not None:
+        # formats plot of guessed trajectories
+        ax.set_yscale('log')
+        ax.set_xlabel(r'$t$ [ms]', fontsize=ax_fs)
+        ax.set_ylabel(r'$R(t)$ [$\mu$m]', fontsize=ax_fs)
+        ax.tick_params(axis='both', labelsize=tk_fs)
+        if title:
+            ax.set_title(title, fontsize=t_fs)
+        if x_lim is not None:
+            ax.set_xlim(x_lim)
+        if y_lim is not None:
+            ax.set_ylim(y_lim)
+
+        # creates legend to the right of the plot
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width*0.8, box.height])
+        legend_x = 1
+        legend_y = 0.5
+        plt.legend(loc='center left', bbox_to_anchor=(legend_x, legend_y))
+
+    return t_nuc, output
+
+
+def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
+                eos_co2_file, frac_lo, frac_hi,
+                D_lo, D_hi, growth_fn, dt, R_nuc, fit_fn_params,
+                exp_ratio_tol, fit_fn=fit_growth_to_pts, L_frac=1,
+                n_fit=-1, min_data_pts=4, max_iter=15,
+                i_t_nuc=0, i_t=0, i_R=-2,
+                x_lim=None, y_lim=None):
+    """
+    Fits effective diffusivity D and nucleation time t_nuc.
+
+    TODO: select t_nuc_lo and t_nuc_hi with absolute deviation
+    from t_center instead of fractional since deviation should
+    not depend on time traveling through observation capillary.
+    """
+    # initializes dictionary to store growth data
+    growth_data = {}
+
+    # initializes lists to store outputs
+    t_nuc_list = []
+    d_nuc_list = []
+    t_meas_list = []
+    R_meas_list = []
+    output_list = []
+    D_list = []
+
+    # starts counting objects whose growth is modeled
+    ct = 0
+
+    # loads data from each file
+    for data_dir in data_dir_list:
+        # loads data
+        with open(os.path.join(data_dir, data_filename), 'rb') as f:
+            data = pkl.load(f)
+
+        # gets conditions of experiment
+        p_in, p_sat, p_est, p_in, d, L, \
+        v_max, t_center, polyol = op.get_conditions(data['metadata'])
+
+        # creates dictionary for bubbles in current measurement video
+        vid_data = {}
+
+        # gets sizes of each bubble
+        for ID, obj in data['objects'].items():
+            # skips objects that are not definitely real objects (bubbles)
+            if not op.is_true_obj(obj):
+                continue
+
+            # time of observations of bubble since entering observation capillary [s]
+            t_bub = op.calc_t(obj, d, v_max)
+            # bubble radius [m]
+            R_bub = np.asarray(obj['props_proc']['radius [um]']) * um_2_m
+
+            # gets indices of frames for bubble's fully visible early growth
+            idx = op.get_valid_idx(obj, L_frac=L_frac)
+            # skips bubbles for which not enough frames of early growth were observed
+            if len(t_bub[idx]) < min_data_pts:
+                continue
+            # extracts only valid measurements
+            t_bub = t_bub[idx]
+            R_bub = R_bub[idx]
+
+            # estimates bounds on nucleation time [s]
+            t_nuc_lo = frac_lo*t_center
+            t_nuc_hi = frac_hi*t_center
+
+            # sets moveable limits on effective diffusivity for binary search
+            D_lo_tmp = D_lo
+            D_hi_tmp = D_hi
+            for _ in range(max_iter):
+
+                # makes guess for effective diffusivity constant
+                D = (D_lo_tmp + D_hi_tmp) / 2
+                # packages it for solver
+                dict_args = {'D' : D}
+                # collects inputs -- must recollect after an.fit_growth_to_pt b/c it inserts t_nuc
+                eps_params = list((dt, p_sat, R_nuc, L, p_in, v_max,
+                                    polyol_data_file, eos_co2_file))
+
+                # fits nucleation time to data [s]
+                t_nuc, output = fit_fn(t_bub, R_bub, t_nuc_lo, t_nuc_hi,
+                                            growth_fn, eps_params, i_t_nuc,
+                                            **fit_fn_params, max_iter=max_iter,
+                                            dict_args=dict_args)
+
+
+                # extracts model values for time and radius
+                t_fit = output[i_t]
+                R_fit = output[i_R]
+
+                # compares slopes of fit and data
+                exp_ratio = calc_exp_ratio(t_nuc, t_fit, R_fit, t_bub, R_bub)
+
+                if np.abs(exp_ratio - 1) < exp_ratio_tol:
+                    print('For D = {0:g}, exponent ratio '.format(D) + \
+                        '{0:.3f} deviates from 1 by less than tolerance {1:.3f}.' \
+                          .format(exp_ratio, exp_ratio_tol))
+                    break
+
+                print('For D = {0:g}, exponent ratio = {1:.3f}'.format(D, exp_ratio))
+                D_lo_tmp, D_hi_tmp = update_bounds_D(exp_ratio, D,
+                                                        D_lo_tmp, D_hi_tmp)
+
+            # plots result
+            R_i = data['metadata']['object_kwargs']['R_i'] # inner stream radius [m]
+            ax = pltb.fit(t_nuc, output, t_bub, R_bub, R_i)
+            if x_lim:
+                ax.set_xlim(x_lim)
+            if y_lim:
+                ax.set_ylim(y_lim)
+
+            # stores results
+            vid_data[ID] = {'t_nuc' : t_nuc,
+                            'd_nuc' : t_nuc / v_max,
+                            'D' : D,
+                            't_bub' : t_bub,
+                            'R_bub' : R_bub,
+                            't_fit': t_fit,
+                            'R_fit' : R_fit,
+                            'model_output' : output
+                            }
+
+            # ends loop when desired number of trajectories has been fit
+            ct += 1
+            if ct == n_fit:
+                break
+
+        # stores video data under distance along capillary [m]
+        growth_data[d] = vid_data
+
+        # must break out of two for loops when complete
+        if ct == n_fit:
+            break
+
+    return growth_data
+
 
 def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
                      i_t_nuc, sigma_R=0.01, ax=None, max_iter=12, i_t=0,
-                     i_R=8, dict_args={}):
+                     i_R=8, dict_args={}, x_lim=None, y_lim=None):
     """
     Fits the bubble growth to a given bubble radius at a given time. Plots
     the different trajectories if an axis handle is given.
     """
+    # makes sure only one point provided
+    if not isinstance(t_bubble, float):
+        t_bubble = t_bubble[0]
+        R_bubble = R_bubble[0]
+        
     # inserts place-holder (0) for nucleation time in arguments list
     args.insert(i_t_nuc, 0)
     # initializes plot to show the trajectories of different guesses
@@ -326,7 +574,7 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
         return t_nuc_lo, output
 
     # computes error in using lowest nucleation time
-    err_R = np.abs(R_bubble_pred - R_bubble)/R_bubble # fractional error in bubble radius
+    err_R = np.abs(R_bubble_pred - R_bubble)/R_bubble # frac err in bubble rad
 
     # bisection algorithm searches for nucleation time yielding accurate R
     while err_R > sigma_R:
@@ -342,8 +590,9 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
         # finds index of timeline corresponding to measurement of bubble size
         i_bubble = next(i for i in range(len(t)) if t[i] >= t_bubble)
         R_bubble_pred = R[i_bubble]
-        err_R = np.abs(R_bubble_pred - R_bubble)/R_bubble # fractional error in bubble radius
-        # predicted bubble radius too large means nucleation time is too early, so we raise the lower bound
+        err_R = np.abs(R_bubble_pred - R_bubble)/R_bubble # frac err bubble rad.
+        # predicted bubble radius too large means nucleation time is too early,
+        # so we raise the lower bound
         if R_bubble_pred > R_bubble:
             t_nuc_lo = t_nuc
         # otherwise, nucleation time is too late, so we lower the upper bound
@@ -372,6 +621,10 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
         ax.set_xlabel(r'$t$ [ms]', fontsize=16)
         ax.set_ylabel(r'$R(t)$ [$\mu$m]', fontsize=16)
         ax.set_title('Growth Trajectory for Different Nucleation Times', fontsize=20)
+        if x_lim:
+            ax.set_xlim(x_lim)
+        if y_lim:
+            ax.set_ylim(y_lim)
 
         # creates legend to the right of the plot
         box = ax.get_position()
@@ -557,7 +810,7 @@ def d_tolman(d_tolman, args):
 
 def diffusivity(D, args):
     """
-    Wrapper for growth function with varied Tolman length.
+    Wrapper for growth function with varied diffusivity.
     """
     dt0, t_nuc, p_s, R_nuc, L, p_in, v, \
     polyol_data_file, eos_co2_file, adaptive_dt, \
@@ -566,3 +819,18 @@ def diffusivity(D, args):
                      polyol_data_file, eos_co2_file, adaptive_dt=adaptive_dt,
                      implicit=implicit, d_tolman=d_tolman,
                      tol_R=tol_R, alpha=alpha, D=D)
+
+
+def update_bounds_D(exp_ratio, D, D_lo, D_hi):
+    """
+    Updates bounds on guess for effective diffusivity based on ratio of
+    exponents of power-law fits.
+    """
+    # decreases D if fitted slope is too high
+    if exp_ratio > 1:
+        D_hi = D
+    # increases D if fitted slope is too low
+    else:
+        D_lo = D
+
+    return D_lo, D_hi
