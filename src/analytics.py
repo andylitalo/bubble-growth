@@ -280,6 +280,16 @@ def calc_rms_err(t_meas, R_meas, t_pred, R_pred):
     return err
 
 
+def calc_rms_fit(bub_data):
+    """
+    Calculates the RMS error of a given fit.
+    """
+    return calc_rms_err(bub_data['t_bub'],
+                        bub_data['R_bub'],
+                        bub_data['t_fit'],
+                        bub_data['R_fit'])
+
+
 def calc_sgn_mse(t_meas, R_meas, t_pred, R_pred):
     """
     Computes sum of signed squared error and takes mean.
@@ -418,17 +428,8 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
     # initializes dictionary to store growth data
     growth_data = {}
 
-    # initializes lists to store outputs
-    t_nuc_list = []
-    d_nuc_list = []
-    t_meas_list = []
-    R_meas_list = []
-    output_list = []
-    D_list = []
-
     # starts counting objects whose growth is modeled
     ct = 0
-
     # loads data from each file
     for data_dir in data_dir_list:
         # loads data
@@ -548,7 +549,7 @@ def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
     if not isinstance(t_bubble, float):
         t_bubble = t_bubble[0]
         R_bubble = R_bubble[0]
-        
+
     # inserts place-holder (0) for nucleation time in arguments list
     args.insert(i_t_nuc, 0)
     # initializes plot to show the trajectories of different guesses
