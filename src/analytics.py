@@ -424,6 +424,9 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
     TODO: select t_nuc_lo and t_nuc_hi with absolute deviation
     from t_center instead of fractional since deviation should
     not depend on time traveling through observation capillary.
+
+    TODO break down 'model_output' into labeled data in dictionary
+    TODO save some metadata in growth_data
     """
     # initializes dictionary to store growth data
     growth_data = {}
@@ -510,9 +513,9 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
             if y_lim:
                 ax.set_ylim(y_lim)
 
-            # stores results
+            # stores results [SI units]
             vid_data[ID] = {'t_nuc' : t_nuc,
-                            'd_nuc' : t_nuc / v_max,
+                            'd_nuc' : v_max * t_nuc,
                             'D' : D,
                             't_bub' : t_bub,
                             'R_bub' : R_bub,
