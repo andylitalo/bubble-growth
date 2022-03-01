@@ -417,7 +417,8 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
                 exp_ratio_tol, fit_fn=fit_growth_to_pts, L_frac=1,
                 n_fit=-1, min_data_pts=4, max_iter=15,
                 i_t_nuc=0, i_t=0, i_R=-2,
-                x_lim=None, y_lim=None):
+                x_lim=None, y_lim=None, show_plots=True,
+                save_freq=-1, save_path=None, load_path=None):
     """
     Fits effective diffusivity D and nucleation time t_nuc.
 
@@ -428,8 +429,18 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
     TODO break down 'model_output' into labeled data in dictionary
     TODO save some metadata in growth_data
     """
-    # initializes dictionary to store growth data
-    growth_data = {}
+    # tries loading existing data
+    if load_path:
+        try:
+            with open(load_path, 'rb') as f:
+                growth_data = pkl.load(f)
+        except Exception as e:
+            print(e)
+            growth_data = {}
+    else:
+        # initializes dictionary to store growth data
+        growth_data = {}
+
     # starts counting objects whose growth is modeled
     ct = 0
     # loads data from each file
@@ -442,24 +453,31 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
         p_in, p_sat, p_est, d, L, \
         v_max, t_center, polyol = op.get_conditions(data['metadata'])
 
-        # creates dictionary for bubbles in current measurement video
-        vid_data = {}
+        # loads previous data at this distance if available
+        if d in growth_data.keys():
+            vid_data = growth_data[d]
+        else:
+            # creates dictionary for bubbles in current measurement video
+            vid_data = {}
+
         # gets sizes of each bubble
         for ID, obj in data['objects'].items():
             # skips objects that are not definitely real objects (bubbles)
-            if not op.is_true_obj(obj):
+            # or that have already been analyzed
+            if not op.is_true_obj(obj) or (ID in vid_data.keys()):
                 continue
-
             # time of observations of bubble since entering observation capillary [s]
             t_bub = op.calc_t(obj, d, v_max)
             # bubble radius [m]
             R_bub = np.asarray(obj['props_proc']['radius [um]']) * um_2_m
-
             # gets indices of frames for bubble's fully visible early growth
             is_valid_arr = op.get_valid_idx(obj, L_frac=L_frac)
             # skips bubbles for which not enough frames of early growth were observed
             if len(t_bub[is_valid_arr]) < min_data_pts:
                 continue
+
+            print('\nAnalyzing bubble {0:d} at {1:.3f} m.\n'.format(ID, d))
+
             # extracts only valid measurements
             t_bub = t_bub[is_valid_arr]
             R_bub = R_bub[is_valid_arr]
@@ -502,16 +520,24 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
                     break
 
                 print('For D = {0:g}, exponent ratio = {1:.3f}'.format(D, exp_ratio))
-                D_lo_tmp, D_hi_tmp = update_bounds_D(exp_ratio, D,
-                                                        D_lo_tmp, D_hi_tmp)
+                D_lo_tmp, D_hi_tmp = update_bounds_D(exp_ratio, D, D_lo_tmp,
+                                                        D_hi_tmp)
+                # allows for flexible bounds if too constrained
+                if D_hi_tmp >= D_hi and (D_hi_tmp - D)/D_hi_tmp < exp_ratio_tol:
+                    print('Doubling upper bound on D.')
+                    D_hi_tmp *= 2
+                elif D_lo_tmp <= D_lo and (D - D_lo_tmp)/D_lo_tmp < exp_ratio_tol:
+                    print('Halving lower bound on D.')
+                    D_lo_tmp /= 2
 
             # plots result
-            R_i = data['metadata']['object_kwargs']['R_i'] # inner stream radius [m]
-            ax = pltb.fit(t_nuc, output, t_bub, R_bub, R_i)
-            if x_lim:
-                ax.set_xlim(x_lim)
-            if y_lim:
-                ax.set_ylim(y_lim)
+            if show_plots:
+                R_i = data['metadata']['object_kwargs']['R_i'] # inner stream radius [m]
+                ax = pltb.fit(t_nuc, output, t_bub, R_bub, R_i)
+                if x_lim:
+                    ax.set_xlim(x_lim)
+                if y_lim:
+                    ax.set_ylim(y_lim)
 
             # stores results [SI units]
             vid_data[ID] = {'t_nuc' : t_nuc,
@@ -526,11 +552,21 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
 
             # ends loop when desired number of trajectories has been fit
             ct += 1
+            print('\nAnalyzed {0:d} bubbles.\n'.format(ct))
             if ct == n_fit:
                 break
 
+            # saves data periodically
+            if ( (ct % save_freq) == 1 ) and save_path:
+                print('Saving after {0:d} bubbles analyzed.\n'.format(ct))
+                growth_data[d] = vid_data
+                with open(save_path, 'wb') as f:
+                    pkl.dump(growth_data, f)
+
         # stores video data under distance along capillary [m]
         growth_data[d] = vid_data
+        print('\nAnalyzed videos taken at distance {0:.3f} m.'.format(d))
+        print('There are {0:d} videos to analyze.\n'.format(len(data_dir_list)))
 
         # must break out of two for loops when complete
         if ct == n_fit:
