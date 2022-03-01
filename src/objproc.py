@@ -78,6 +78,20 @@ def calc_t(obj, d, v_max):
 
 
 def calc_W(obj):
+    """
+    Computes width (vertical extent) of objects since entering observation
+    capillary [s].
+
+    Parameters
+    ----------
+    obj : dictionary
+        TrackedObj converted to dictionary from bubbletracking_koe
+
+    Returns
+    -------
+    W_list : list of floats
+        Width (vertical extent) of object in um.
+    """
     # computes width [um]
     bbox_list = obj['props_raw']['bbox']
     pix_per_um = obj['metadata']['pix_per_um']
@@ -87,7 +101,36 @@ def calc_W(obj):
 
 
 def get_conditions(metadata):
-    """Gets conditions of experiment."""
+    """
+    Gets conditions of experiment.
+
+    Parameters
+    ----------
+    metadata : dictionary
+        Metadata from the data file of an experiment.
+
+    Returns
+    -------
+    p_in : float
+        Inlet pressure [Pa]
+    p_sat : float
+        Saturation pressure of polyol - CO2 mixture used in inner stream [Pa].
+    p_est : float
+        Estimated pressure at point of observation assuming linear pressure
+        profile [Pa].
+    d : float
+        Distance from entrance of observation capillary to center of field of
+        view [m].
+    L : float
+        Length of observation capillary [m].
+    v_max : float
+        Speed along centerline of inner stream estimated with flow eqns [m/s].
+    t_center : float
+        Estimated time for a fluid element along the centerline to travel from
+        entrance of observation capillary to center of field of view [s].
+    polyol : string
+        Abbreviated name of polyol used in experiment.
+    """
     # saturation pressure and units
     _, p_sat, units = fn.parse_vid_dir(metadata['vid_subdir'])
     # distance along channel [m]
@@ -114,30 +157,58 @@ def get_conditions(metadata):
     # computes time to reach center of field of view
     t_center = d / v_max
 
-    return p_in, p_sat, p_est, p_in, d, L, v_max, t_center, polyol
+    return p_in, p_sat, p_est, d, L, v_max, t_center, polyol
 
 
 def get_valid_idx(obj, L_frac=1):
     """
-    Gets indices of frames where object has valid
-    properties for fitting early growth, meaning
-    the object is not on the border and is not too
-    oblong.
+    Gets indices of frames where bubble is "valid" for fitting early growth,
+    meaning the bubble is not on the border of the frame and is not too oblong.
+
+    Parameters
+    ----------
+    obj : dictionary
+        Bubble object converted to dictionary of image-processing data (see
+        `bubbletracking_koe` github repo)
+    L_frac : float, optional
+        If bubble length (horizontal extent) is > this fraction of inner stream
+        width, bubble is too oblong. Default is 1.
+
+    Returns
+    -------
+    is_valid_arr : numpy array of bools
+        True if observation of bubble at given index is valid; False if not.
     """
     # gets bubble size [um]
-    # W_bub = np.asarray(calc_W(obj))
     L_bub = np.asarray(calc_L(obj))
     # gets valid indices (eliminates where on border or where bubble is too long
     not_on_border = np.logical_not(np.asarray(obj['props_raw']['on border']))
     R_i = obj['metadata']['R_i']*m_2_um # [um]
     not_too_long = L_bub < 2*R_i * L_frac
-    idx = np.logical_and(not_on_border, not_too_long)
+    is_valid_arr = np.logical_and(not_on_border, not_too_long)
 
-    return idx
+    return is_valid_arr
 
 
-def is_true_obj(obj, true_props=['inner stream', 'oriented', 'consecutive', 'exited', 'centered']):
-    """Returns True if true object and False if not."""
+def is_true_obj(obj, true_props=['inner stream', 'oriented', 'consecutive',
+                'exited', 'centered']):
+    """
+    Returns True if object passes tests to be a "true" object (i.e., one worth
+    analyzing and not noise) and False if not.
+
+    Parameters
+    ----------
+    obj : dictionary
+        TrackedObj object converted to dictionary of image-processing data (see
+        `bubbletracking_koe` github repo)
+    true_props : list of strings
+        List of properties that must be True for object to be considered True.
+
+    Returns
+    -------
+    is_true : bool
+        True if object is true and False if not.
+    """
     for prop in true_props:
         # if lacks one of the key props for a true object, not a true object
         try:
