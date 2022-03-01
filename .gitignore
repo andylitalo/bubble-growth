@@ -5,3 +5,4 @@
 *.sh
 *.svg
 *.jpg
+output/*
