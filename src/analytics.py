@@ -427,7 +427,6 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
     """
     # initializes dictionary to store growth data
     growth_data = {}
-
     # starts counting objects whose growth is modeled
     ct = 0
     # loads data from each file
@@ -437,12 +436,11 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
             data = pkl.load(f)
 
         # gets conditions of experiment
-        p_in, p_sat, p_est, p_in, d, L, \
+        p_in, p_sat, p_est, d, L, \
         v_max, t_center, polyol = op.get_conditions(data['metadata'])
 
         # creates dictionary for bubbles in current measurement video
         vid_data = {}
-
         # gets sizes of each bubble
         for ID, obj in data['objects'].items():
             # skips objects that are not definitely real objects (bubbles)
@@ -455,13 +453,13 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
             R_bub = np.asarray(obj['props_proc']['radius [um]']) * um_2_m
 
             # gets indices of frames for bubble's fully visible early growth
-            idx = op.get_valid_idx(obj, L_frac=L_frac)
+            is_valid_arr = op.get_valid_idx(obj, L_frac=L_frac)
             # skips bubbles for which not enough frames of early growth were observed
-            if len(t_bub[idx]) < min_data_pts:
+            if len(t_bub[is_valid_arr]) < min_data_pts:
                 continue
             # extracts only valid measurements
-            t_bub = t_bub[idx]
-            R_bub = R_bub[idx]
+            t_bub = t_bub[is_valid_arr]
+            R_bub = R_bub[is_valid_arr]
 
             # estimates bounds on nucleation time [s]
             t_nuc_lo = frac_lo*t_center
