@@ -31,8 +31,6 @@ from conversions import *
 ########################### FUNCTION DEFINITIONS ##############################
 
 
-
-
 def calc_dcdr_eps_fix_D(N_list, R_max, t_nuc, eps_params, dt_max_list=None):
     """
     Calculates concentration gradient at interface of bubble b/w Epstein-Plesset
@@ -315,7 +313,7 @@ def calc_abs_sgn_mse(t_meas, R_meas, t_pred, R_pred):
 
 def fit_growth_to_pts(t_meas, R_meas, t_nuc_lo, t_nuc_hi, growth_fn, args,
                      i_t_nuc, err_fn=calc_abs_sgn_mse, err_tol=0.003, ax=None,
-                     max_iter=15, i_t=0, i_R=8, dict_args={}, x_lim=None,
+                     max_iter=15, i_t=0, i_R=-2, dict_args={}, x_lim=None,
                      y_lim=None, t_fs=18, ax_fs=16, tk_fs=14):
     """
     Finds a suitable model of bubble growth that fits measured bubble radius at
@@ -411,6 +409,53 @@ def fit_growth_to_pts(t_meas, R_meas, t_nuc_lo, t_nuc_hi, growth_fn, args,
     return t_nuc, output
 
 
+def fit_D_t_nuc_load(load_path, save_path, save_freq,
+                        n_fit=-1, show_plots=False):
+    """Wrapper for `fit_D_t_nuc` that loads data with parameters."""
+    # loads data
+    with open(load_path, 'rb') as f:
+        dataset = pkl.load(f)
+    # collects parameters for analysis
+    data = dataset['data']
+    metadata = dataset['metadata']
+    params = metadata + {'save_path' : save_path,
+                    'save_freq' : save_freq,
+                    'n_fit' : n_fit,
+                    'show_plots' : show_plots,
+                    'data' : data}
+
+    return fit_D_t_nuc(**params)
+
+def arrange_metadata(data_filename, data_dir_list, polyol_data_file,
+                    eos_co2_file, frac_lo, frac_hi, D_lo, D_hi, growth_fn, dt,
+                    R_nuc, fit_fn_params, exp_ratio_tol, fit_fn, L_frac,
+                    min_data_pts, max_iter, i_t_nuc, i_t, i_R):
+    """Arranges metadata for `fit_D_t_nuc`."""
+    metadata = {'data_filename' : data_filename,
+                'data_dir_list' : data_dir_list,
+                'polyol_data_file' : polyol_data_file,
+                'eos_co2_file' : eos_co2_file,
+                'frac_lo' : frac_lo,
+                'frac_hi' : frac_hi,
+                'D_lo' : D_lo,
+                'D_hi' : D_hi,
+                'growth_fn' : growth_fn,
+                'dt' : dt,
+                'R_nuc' : R_nuc,
+                'fit_fn_params' : fit_fn_params,
+                'exp_ratio_tol' : exp_ratio_tol,
+                'fit_fn' : fit_fn,
+                'L_frac' : L_frac,
+                'min_data_pts' : min_data_pts,
+                'max_iter' : max_iter,
+                'i_t_nuc' : i_t_nuc,
+                'i_t' : i_t,
+                'i_R' : i_R,
+                }
+
+    return metadata
+
+
 def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
                 eos_co2_file, frac_lo, frac_hi,
                 D_lo, D_hi, growth_fn, dt, R_nuc, fit_fn_params,
@@ -418,7 +463,7 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
                 n_fit=-1, min_data_pts=4, max_iter=15,
                 i_t_nuc=0, i_t=0, i_R=-2,
                 x_lim=None, y_lim=None, show_plots=True,
-                save_freq=-1, save_path=None, load_path=None):
+                save_freq=-1, save_path=None, data={}):
     """
     Fits effective diffusivity D and nucleation time t_nuc.
 
@@ -427,19 +472,14 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
     not depend on time traveling through observation capillary.
 
     TODO break down 'model_output' into labeled data in dictionary
-    TODO save some metadata in growth_data
     """
-    # tries loading existing data
-    if load_path:
-        try:
-            with open(load_path, 'rb') as f:
-                growth_data = pkl.load(f)
-        except Exception as e:
-            print(e)
-            growth_data = {}
-    else:
-        # initializes dictionary to store growth data
-        growth_data = {}
+    # # arranges metadata
+    metadata = arrange_metadata(data_filename, data_dir_list, polyol_data_file,
+                    eos_co2_file, frac_lo, frac_hi, D_lo, D_hi, growth_fn, dt,
+                    R_nuc, fit_fn_params, exp_ratio_tol, fit_fn, L_frac,
+                    min_data_pts, max_iter, i_t_nuc, i_t, i_R)
+    # initializes output dataset
+    dataset = {'data' : data, 'metadata' : metadata}
 
     # starts counting objects whose growth is modeled
     ct = 0
@@ -447,21 +487,21 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
     for data_dir in data_dir_list:
         # loads data
         with open(os.path.join(data_dir, data_filename), 'rb') as f:
-            data = pkl.load(f)
+            raw_data = pkl.load(f)
 
         # gets conditions of experiment
         p_in, p_sat, p_est, d, L, \
-        v_max, t_center, polyol = op.get_conditions(data['metadata'])
+        v_max, t_center, polyol = op.get_conditions(raw_data['metadata'])
 
         # loads previous data at this distance if available
-        if d in growth_data.keys():
-            vid_data = growth_data[d]
+        if d in data.keys():
+            vid_data = data[d]
         else:
             # creates dictionary for bubbles in current measurement video
             vid_data = {}
 
         # gets sizes of each bubble
-        for ID, obj in data['objects'].items():
+        for ID, obj in raw_data['objects'].items():
             # skips objects that are not definitely real objects (bubbles)
             # or that have already been analyzed
             if not op.is_true_obj(obj) or (ID in vid_data.keys()):
@@ -536,7 +576,7 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
 
             # plots result
             if show_plots:
-                R_i = data['metadata']['object_kwargs']['R_i'] # inner stream radius [m]
+                R_i = raw_data['metadata']['object_kwargs']['R_i'] # inner stream radius [m]
                 ax = pltb.fit(t_nuc, output, t_bub, R_bub, R_i)
                 if x_lim:
                     ax.set_xlim(x_lim)
@@ -563,25 +603,28 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
             # saves data periodically
             if ( (ct % save_freq) == 1 ) and save_path:
                 print('Saving after {0:d} bubbles analyzed.\n'.format(ct))
-                growth_data[d] = vid_data
+                data[d] = vid_data
+                dataset['data'] = data
                 with open(save_path, 'wb') as f:
-                    pkl.dump(growth_data, f)
+                    pkl.dump(dataset, f)
 
         # stores video data under distance along capillary [m]
-        growth_data[d] = vid_data
+        data[d] = vid_data
         print('\nAnalyzed videos taken at distance {0:.3f} m.'.format(d))
         print('There are {0:d} videos to analyze.\n'.format(len(data_dir_list)))
 
         # must break out of two for loops when complete
         if ct == n_fit:
             break
+    # ensures all data have been stored 
+    dataset['data'] = data
 
-    return growth_data
+    return dataset
 
 
 def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
                      i_t_nuc, sigma_R=0.01, ax=None, max_iter=12, i_t=0,
-                     i_R=8, dict_args={}, x_lim=None, y_lim=None):
+                     i_R=-2, dict_args={}, x_lim=None, y_lim=None):
     """
     Fits the bubble growth to a given bubble radius at a given time. Plots
     the different trajectories if an axis handle is given.
