@@ -522,11 +522,15 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
                 print('For D = {0:g}, exponent ratio = {1:.3f}'.format(D, exp_ratio))
                 D_lo_tmp, D_hi_tmp = update_bounds_D(exp_ratio, D, D_lo_tmp,
                                                         D_hi_tmp)
-                # allows for flexible bounds if too constrained
-                if D_hi_tmp >= D_hi and (D_hi_tmp - D)/D_hi_tmp < exp_ratio_tol:
+                # expands bounds on D if
+                if (D_hi_tmp >= D_hi) and \
+                        ((D_hi_tmp - D)/D_hi_tmp < exp_ratio_tol) and \
+                        (D < D_hi_tmp):
                     print('Doubling upper bound on D.')
                     D_hi_tmp *= 2
-                elif D_lo_tmp <= D_lo and (D - D_lo_tmp)/D_lo_tmp < exp_ratio_tol:
+                elif (D_lo_tmp <= D_lo) and \
+                        ((D - D_lo_tmp)/D_lo_tmp < exp_ratio_tol) and \
+                        (D > D_lo_tmp):
                     print('Halving lower bound on D.')
                     D_lo_tmp /= 2
 
