@@ -136,7 +136,9 @@ def get_conditions(metadata):
     # distance along channel [m]
     d = metadata['object_kwargs']['d']
     # polyol
-    polyol = fn.parse_vid_path(metadata['vid_name'])['prefix'].split('_')[0]
+    vid_params = fn.parse_vid_path(metadata['vid_name'])
+    polyol = vid_params['prefix'].split('_')[0]
+    num= vid_params['num']
     # estimated pressure in given units
     L = metadata['L'] # length of observation capillary [m]
     p_in = -metadata['object_kwargs']['dp']
@@ -157,7 +159,7 @@ def get_conditions(metadata):
     # computes time to reach center of field of view
     t_center = d / v_max
 
-    return p_in, p_sat, p_est, d, L, v_max, t_center, polyol
+    return p_in, p_sat, p_est, d, L, v_max, t_center, polyol, num
 
 
 def get_valid_idx(obj, L_frac=1):
