@@ -707,7 +707,7 @@ def neumann(c, i, j, dcdr, r_arr):
 
 def regrid(grid, vals, grid_fn, N, R_max, args, interp_kind):
     """
-    Interpolates valus over new grid.
+    Interpolates values over new grid.
     """
     print('regridding')
     # reduces the k value by fixed value
