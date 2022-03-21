@@ -413,11 +413,15 @@ def fit_D_t_nuc_load(load_path, save_path, save_freq=-1,
                         n_fit=-1, show_plots=False, metatag='_meta.pkl'):
     """Wrapper for `fit_D_t_nuc` that loads data with parameters."""
     # loads data
-    with open(load_path, 'rb') as f:
-        data = pkl.load(f)
-    # loads metadata
-    with open(os.path.splitext(load_path)[0] + metatag, 'rb') as f:
-        metadata = pkl.load(f)
+    try:
+        with open(load_path, 'rb') as f:
+            data = pkl.load(f)
+        # loads metadata
+        with open(os.path.splitext(load_path)[0] + metatag, 'rb') as f:
+            metadata = pkl.load(f)
+    except:
+        data = {}
+        metadata = {}
 
     # collects parameters for analysis
     addl_params = {'save_path' : save_path,
@@ -486,6 +490,7 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
     if save_path:
         with open(os.path.splitext(save_path)[0] + metatag, 'wb') as f:
             pkl.dump(metadata, f)
+            
 
     # starts counting objects whose growth is modeled
     ct = 0
@@ -496,20 +501,18 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
             raw_data = pkl.load(f)
 
         # gets conditions of experiment
-        p_in, p_sat, p_est, d, L, \
-        v_max, t_center, polyol, num = op.get_conditions(raw_data['metadata'])
+        v_meta = op.get_vid_metadata(raw_data['metadata'])
+        num = v_meta['num']
 
         # loads previous data at this distance if available
         if num in data.keys():
             vid_data = data[num]
+            # updates metadata if new params added
+            vid_data['metadata'] = v_meta
         else:
             # creates dictionary for bubbles in current measurement video
             vid_data = {'data' : {},
-                        'metadata' :
-                            {'p_in' : p_in, 'p_sat' : p_sat, 'p_est' : p_est,
-                            'd' : d, 'L' : L, 'v_max' : v_max,
-                            't_center' : t_center, 'polyol' : polyol}
-                        }
+                        'metadata' : v_meta}
 
         # gets sizes of each bubble
         for ID, obj in raw_data['objects'].items():
@@ -519,7 +522,7 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
                 continue
 
             # time of observations of bubble since entering observation capillary [s]
-            t_bub = op.calc_t(obj, d, v_max)
+            t_bub = op.calc_t(obj, v_meta['d'], v_meta['v_max'])
             # bubble radius [m]
             R_bub = np.asarray(obj['props_proc']['radius [um]']) * um_2_m
             # just in case, stores width (vertical extent) and length
@@ -532,7 +535,7 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
             if len(t_bub[is_valid_arr]) < min_data_pts:
                 continue
 
-            print('\nAnalyzing bubble {0:d} at {1:.3f} m.\n'.format(ID, d))
+            print('\nAnalyzing bubble {0:d} at {1:.3f} m.\n'.format(ID, v_meta['d']))
 
             # extracts only valid measurements
             t_bub = t_bub[is_valid_arr]
@@ -541,6 +544,7 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
             L_bub = L_bub[is_valid_arr]
 
             # estimates bounds on nucleation time [s]
+            t_center = v_meta['d'] / v_meta['v_max']
             t_nuc_lo = frac_lo*t_center
             t_nuc_hi = frac_hi*t_center
 
@@ -554,7 +558,7 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
                 # packages it for solver
                 dict_args = {'D' : D}
                 # collects inputs -- must recollect after an.fit_growth_to_pt b/c it inserts t_nuc
-                eps_params = list((dt, p_sat, R_nuc, L, p_in, v_max,
+                eps_params = list((dt, v_meta['p_sat'], R_nuc, v_meta['L'], v_meta['p_in'], v_meta['v_max'],
                                     polyol_data_file, eos_co2_file))
 
                 # fits nucleation time to data [s]
@@ -602,7 +606,7 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
 
             # stores results [SI units]
             vid_data['data'][ID] = {'t_nuc' : t_nuc,
-                            'd_nuc' : v_max * t_nuc,
+                            'd_nuc' : v_meta['v_max'] * t_nuc,
                             'D' : D,
                             't_bub' : t_bub,
                             'R_bub' : R_bub,
@@ -629,7 +633,7 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
 
         # stores video data under distance along capillary [m]
         data[num] = vid_data
-        print('\nAnalyzed videos taken at distance {0:.3f} m.'.format(d))
+        print('\nAnalyzed videos taken at distance {0:.3f} m.'.format(v_meta['d']))
         print('There are {0:d} videos to analyze.\n'.format(len(data_dir_list)))
 
         # must break out of two for loops when complete

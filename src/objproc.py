@@ -103,6 +103,7 @@ def calc_W(obj):
 def get_conditions(metadata):
     """
     Gets conditions of experiment.
+    ***LEGACY*** `get_vid_metadata` preferred.
 
     Parameters
     ----------
@@ -130,19 +131,23 @@ def get_conditions(metadata):
         entrance of observation capillary to center of field of view [s].
     polyol : string
         Abbreviated name of polyol used in experiment.
+    num : int
+        Number of video (1-indexed in order that they were taken).
     """
+    conds = {}
     # saturation pressure and units
     _, p_sat, units = fn.parse_vid_dir(metadata['vid_subdir'])
+    conds['p_sat'] = p_sat
     # distance along channel [m]
-    d = metadata['object_kwargs']['d']
+    conds['d'] = metadata['object_kwargs']['d']
     # polyol
     vid_params = fn.parse_vid_path(metadata['vid_name'])
-    polyol = vid_params['prefix'].split('_')[0]
-    num= vid_params['num']
+    conds['polyol'] = vid_params['prefix'].split('_')[0]
+    conds['num'] = vid_params['num']
     # estimated pressure in given units
-    L = metadata['L'] # length of observation capillary [m]
-    p_in = -metadata['object_kwargs']['dp']
-    p_est = (1 - d/L)*p_in # [Pa]
+    conds['L'] = metadata['L'] # length of observation capillary [m]
+    conds['p_in'] = -metadata['object_kwargs']['dp']
+    conds['p_est'] = (1 - d/L)*p_in # [Pa]
     if units == 'bar':
         p_sat *= bar_2_Pa
     elif units == 'mpa':
@@ -152,14 +157,12 @@ def get_conditions(metadata):
     else:
         print('Units "{0:s}" not recognized.'.format(units))
 
-    L = metadata['L'] # length of observation capillary [m]
-    p_in = -metadata['object_kwargs']['dp'] # inlet pressure est w flow eqns [Pa]
-    v_max = metadata['object_kwargs']['v_max'] # centerline speed [m/s] est w flow eqns
+    conds['v_max'] = metadata['object_kwargs']['v_max'] # centerline speed [m/s] est w flow eqns
 
     # computes time to reach center of field of view
-    t_center = d / v_max
+    conds['t_center'] = d / v_max
 
-    return p_in, p_sat, p_est, d, L, v_max, t_center, polyol, num
+    return conds
 
 
 def get_valid_idx(obj, L_frac=1):
@@ -190,6 +193,56 @@ def get_valid_idx(obj, L_frac=1):
     is_valid_arr = np.logical_and(not_on_border, not_too_long)
 
     return is_valid_arr
+
+
+def get_vid_metadata(metadata):
+    """
+    Gets the metadata from the video that is required for nucleation analysis.
+    
+    Parameters
+    ----------
+    
+    Returns
+    -------
+    
+    """
+    v = {}
+    # saturation pressure and units
+    _, p_sat, units = fn.parse_vid_dir(metadata['vid_subdir'])
+    # distance along channel [m]
+    v['d'] = metadata['object_kwargs']['d']
+    # polyol
+    vid_params = fn.parse_vid_path(metadata['vid_name'])
+    v['polyol'] = vid_params['prefix'].split('_')[0]
+    v['num'] = vid_params['num']
+    # estimated pressure in given units
+    v['L'] = metadata['L'] # length of observation capillary [m]
+    v['p_in'] = -metadata['object_kwargs']['dp']
+    v['p_est'] = (1 - v['d']/v['L'])*v['p_in'] # [Pa]
+    if units == 'bar':
+        p_sat *= bar_2_Pa
+    elif units == 'mpa':
+        p_sat *= MPa_2_Pa
+    elif units == 'psi':
+        p_sat *= psi_2_Pa
+    else:
+        print('Units "{0:s}" not recognized.'.format(units))
+        
+    v['p_sat'] = p_sat # [Pa]
+
+    v['v_max'] = metadata['object_kwargs']['v_max'] # centerline speed [m/s] est w flow eqns
+    v['n_frames'] = metadata['n_frames']
+    v['eta_i'] = metadata['eta_i']
+    v['eta_o'] = metadata['eta_o']
+    v['R_o'] = metadata['R_o']
+    v['frame_dim'] = metadata['bkgd'].shape
+    v['fps'] = metadata['fps']
+    v['flow_dir'] = metadata['object_kwargs']['flow_dir']
+    v['pix_per_um'] = metadata['object_kwargs']['pix_per_um']
+    v['R_i'] = metadata['object_kwargs']['R_i']
+    v['v_interf'] = metadata['object_kwargs']['v_interf']
+    
+    return v    
 
 
 def is_true_obj(obj, true_props=['inner stream', 'oriented', 'consecutive',
