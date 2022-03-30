@@ -509,7 +509,7 @@ def init(p_in, p_s, t_nuc, R_nuc, v, L, D, polyol_data_file,
     c_bulk = np.interp(p_s, *c_s_interp_arrs) # computes bulk CO2 concentration
     if D == -1:
         D = polyco2.calc_D(p_s, polyol_data_file) # assumes diffusivity of saturation pressure
-    # creates interpolation fn for density of CO2 based on equation of state
+    # creates interpolation fn for density of CO2 as a fn of pressure based on equation of state
     f_rho_co2 = polyco2.interp_rho_co2(eos_co2_file)
 
     # initializes lists of key bubble properties

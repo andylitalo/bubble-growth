@@ -26,6 +26,9 @@ sys.path.append('../libs/')
 import finitediff as fd
 import plot.bubble as pltb
 from conversions import *
+from constants import *
+import polyco2
+import flow
 
 
 ########################### FUNCTION DEFINITIONS ##############################
@@ -166,7 +169,7 @@ def calc_exp_ratio(t_nuc, t_fit, R_fit, t_meas, R_meas):
     # removes nucleation point at the beginning
     t_fit = t_fit[1:]
     R_fit = R_fit[1:]
-    assert np.min(t_meas) > t_nuc and np.min(t_fit) > t_nuc, 'Nucleation time must be before times provided.'
+    assert np.min(t_meas) > t_nuc and np.min(t_fit) >= t_nuc, 'Nucleation time must be before times provided.'
     # computes ratio
     exp_fit, _ = np.polyfit( np.log(t_fit - t_nuc), np.log(R_fit), 1 )
     exp_meas, _ = np.polyfit( np.log(t_meas - t_nuc), np.log(R_meas), 1 )
@@ -469,7 +472,7 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
                 D_lo, D_hi, growth_fn, dt, R_nuc, fit_fn_params,
                 exp_ratio_tol, fit_fn=fit_growth_to_pts, L_frac=1,
                 n_fit=-1, min_data_pts=4, max_iter=15,
-                i_t_nuc=0, i_t=0, i_R=-2,
+                i_t_nuc=0, i_t=0, i_R=-2, rho_co2_vap=50,
                 x_lim=None, y_lim=None, show_plots=True,
                 save_freq=-1, save_path=None, data={}, metatag='_meta.pkl'):
     """
@@ -480,6 +483,11 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
     not depend on time traveling through observation capillary.
 
     TODO break down 'model_output' into labeled data in dictionary
+
+    Parameters
+    ----------
+    rho_co2_vap : float, optional
+        Maximum density of a vapor-like CO2 at which `bubble.grow` method doesn't get stuck
     """
     # arranges metadata
     metadata = arrange_metadata(data_filename, data_dir_list, polyol_data_file,
@@ -543,10 +551,19 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
             W_bub = W_bub[is_valid_arr]
             L_bub = L_bub[is_valid_arr]
 
-            # estimates bounds on nucleation time [s]
-            t_center = v_meta['d'] / v_meta['v_max']
-            t_nuc_lo = frac_lo*t_center
-            t_nuc_hi = frac_hi*t_center
+            ### Estimates bounds on nucleation time [s]
+            # function to estimate density of co2 vs. pressure
+            f_rho_co2 = polyco2.interp_rho_co2(eos_co2_file)
+            # array of times from entering observation capillary to observation of bubble [s]
+            t_arr = np.linspace(0, np.min(t_bub), 100)
+            # array of pressures in observation capillary at times given in t_arr
+            p_arr = flow.calc_p(v_meta['p_in'], P_ATM, v_meta['v_max'], t_arr, v_meta['L'])
+            # finds index where estimated CO2 density at corresponding pressure is below threshold vapor density
+            i_vap = np.where(f_rho_co2(p_arr) < rho_co2_vap)[0][0]
+            # sets earliest possible nucleation time to time when CO2 becomes vapor-like at local pressure
+            t_nuc_lo = t_arr[i_vap]
+            # sets latest possible nucleation time to time when bubble first observed
+            t_nuc_hi = np.min(t_bub)
 
             # sets moveable limits on effective diffusivity for binary search
             D_lo_tmp = D_lo
