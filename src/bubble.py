@@ -647,6 +647,11 @@ def scf_bubble_impl(m, R, p_bub, c_bulk, c_s, D, m_prev,
     return res
 
 
+def sqrt_fit(t, D, t_nuc):
+    """Square-root fit R(t) = sqrt(D*(t - t_nuc))."""
+    return np.sqrt(D*(np.abs(t - t_nuc)))
+
+
 def time_step_dcdr(dt, inputs, args):
     """
     Advances system forward by one time step using dc/dr direct calculation.
