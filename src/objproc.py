@@ -77,6 +77,16 @@ def calc_t(obj, d, v_max):
     return t
 
 
+# def calc_tail(obj):
+#     """Calculates the position of the tail of an object (minimum column)."""
+#     # computes tail position [um]
+#     bbox_list = obj['props_raw']['bbox']
+#     pix_per_um = obj['metadata']['pix_per_um']
+#     tail_list = [col_lo/pix_per_um for _, col_lo, _, _ in bbox_list]
+
+#     return tail_list
+
+
 def calc_W(obj):
     """
     Computes width (vertical extent) of objects since entering observation
@@ -98,6 +108,19 @@ def calc_W(obj):
     W_list = [(r_hi - r_lo)/pix_per_um for r_lo, _, r_hi, _ in bbox_list]
 
     return W_list
+
+
+def est_flow_speed(obj):
+    """
+    Estimates flow speed by linear extrapolation of speed from early
+    growth to bubble of size 0.
+    """
+    L = np.asarray(calc_L(obj))
+    v = np.asarray(obj['props_proc']['speed']) / obj['metadata']['pix_per_um']  * um_2_m # [m/s]
+    idx = get_valid_idx(obj)
+    _, flow_speed = np.polyfit(L[idx], v[idx], 1)
+
+    return flow_speed
 
 
 def get_conditions(metadata):
@@ -163,6 +186,14 @@ def get_conditions(metadata):
     conds['t_center'] = d / v_max
 
     return conds
+
+
+def get_v_init(obj):
+    """
+    Returns initial speed of object computed between first two observations. [m/s]
+    See `est_flow_speed` for more robust estimation of flow speed.
+    """
+    return obj['props_proc']['speed'][0] / obj['metadata']['pix_per_um']  * um_2_m
 
 
 def get_valid_idx(obj, L_frac=1):
