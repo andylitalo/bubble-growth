@@ -15,6 +15,7 @@ import time
 # 3rd party libraries
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.optimize
 
 # imports custom libraries
 import objproc as op
@@ -169,9 +170,10 @@ def calc_exp_ratio(t_nuc, t_fit, R_fit, t_meas, R_meas):
     # removes nucleation point at the beginning
     t_fit = t_fit[1:]
     R_fit = R_fit[1:]
-    assert np.min(t_meas) > t_nuc and np.min(t_fit) >= t_nuc, 'Nucleation time must be before times provided.'
+    t_nuc_in_range = np.min(t_meas) > t_nuc and np.min(t_fit) >= t_nuc
+    assert t_nuc_in_range, 'Nucleation time must be before times provided.'
     # computes ratio
-    exp_fit, _ = np.polyfit( np.log(t_fit - t_nuc), np.log(R_fit), 1 )
+    exp_fit, _ = np.polyfit( np.log(t_fit - t_nuc), np.log(R_fit), 1 )  
     exp_meas, _ = np.polyfit( np.log(t_meas - t_nuc), np.log(R_meas), 1 )
     exp_ratio = exp_fit / exp_meas
 
@@ -314,6 +316,61 @@ def calc_abs_sgn_mse(t_meas, R_meas, t_pred, R_pred):
     return np.abs(calc_sgn_mse(t_meas, R_meas, t_pred, R_pred))
 
 
+def ep_param_fit(fit_fn, growth_fn, v_meta, polyol_data_file, 
+            eos_co2_file, t_bub, R_bub, t_nuc_lo, 
+            t_nuc_hi, i_t_nuc, fit_fn_params, D_lo, 
+            D_hi, dt, R_nuc, max_iter, i_t, i_R,
+            exp_ratio_tol):
+    """Fits D and t_nuc parameters of Epstein - Plesset model."""
+    # sets moveable limits on effective diffusivity for binary search
+    D_lo_tmp = D_lo
+    D_hi_tmp = D_hi
+    for _ in range(max_iter):
+
+        # makes guess for effective diffusivity constant
+        D = (D_lo_tmp + D_hi_tmp) / 2
+        # packages it for solver
+        dict_args = {'D' : D}
+        # collects inputs -- must recollect after an.fit_growth_to_pt b/c it inserts t_nuc
+        eps_params = list((dt, v_meta['p_sat'], R_nuc, v_meta['L'], v_meta['p_in'], v_meta['v_max'],
+                            polyol_data_file, eos_co2_file))
+
+        # fits nucleation time to data [s]
+        t_nuc, output = fit_fn(t_bub, R_bub, t_nuc_lo, t_nuc_hi,
+                                    growth_fn, eps_params, i_t_nuc,
+                                    **fit_fn_params, max_iter=max_iter,
+                                    dict_args=dict_args)
+        # extracts model values for time and radius
+        t_fit = output[i_t]
+        R_fit = output[i_R]
+
+        # compares slopes of fit and data
+        exp_ratio = calc_exp_ratio(t_nuc, t_fit, R_fit, t_bub, R_bub)
+
+        if np.abs(exp_ratio - 1) < exp_ratio_tol:
+            print('For D = {0:g}, exponent ratio '.format(D) + \
+                '{0:.3f} deviates from 1 by less than tolerance {1:.3f}.' \
+                    .format(exp_ratio, exp_ratio_tol))
+            break
+
+        print('For D = {0:g}, exponent ratio = {1:.3f}'.format(D, exp_ratio))
+        D_lo_tmp, D_hi_tmp = update_bounds_D(exp_ratio, D, D_lo_tmp,
+                                                D_hi_tmp)
+        # expands bounds on D if
+        if (D_hi_tmp >= D_hi) and \
+                ((D_hi_tmp - D)/D_hi_tmp < exp_ratio_tol) and \
+                (D < D_hi_tmp):
+            print('Doubling upper bound on D.')
+            D_hi_tmp *= 2
+        elif (D_lo_tmp <= D_lo) and \
+                ((D - D_lo_tmp)/D_lo_tmp < exp_ratio_tol) and \
+                (D > D_lo_tmp):
+            print('Halving lower bound on D.')
+            D_lo_tmp /= 2
+                    
+    return D, t_nuc, t_fit, R_fit, output
+
+
 def fit_growth_to_pts(t_meas, R_meas, t_nuc_lo, t_nuc_hi, growth_fn, args,
                      i_t_nuc, err_fn=calc_abs_sgn_mse, err_tol=0.003, ax=None,
                      max_iter=15, i_t=0, i_R=-2, dict_args={}, x_lim=None,
@@ -326,7 +383,7 @@ def fit_growth_to_pts(t_meas, R_meas, t_nuc_lo, t_nuc_hi, growth_fn, args,
     args.insert(i_t_nuc, 0)
     # initializes plot to show the trajectories of different guesses
     if ax is not None:
-        ax.plot(t_bubble*s_2_ms, R_bubble*m_2_um, 'g*', ms=12, label='fit pt')
+        ax.plot(t_meas*s_2_ms, R_meas*m_2_um, 'g*', ms=12, label='fit pt')
 
     # initializes counter of number of iterations
     n_iter = 0
@@ -471,7 +528,7 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
                 eos_co2_file, frac_lo, frac_hi,
                 D_lo, D_hi, growth_fn, dt, R_nuc, fit_fn_params,
                 exp_ratio_tol, fit_fn=fit_growth_to_pts, L_frac=1,
-                n_fit=-1, min_data_pts=4, max_iter=15,
+                fit_proc=ep_param_fit, n_fit=-1, min_data_pts=4, max_iter=15,
                 i_t_nuc=0, i_t=0, i_R=-2, rho_co2_vap=50,
                 x_lim=None, y_lim=None, show_plots=True,
                 save_freq=-1, save_path=None, data={}, metatag='_meta.pkl'):
@@ -522,6 +579,19 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
             vid_data = {'data' : {},
                         'metadata' : v_meta}
 
+
+        # ESTIMATES SPEED OF FLOW -- IN PROGRESS
+        for ID, obj in raw_data['objects'].items():
+            is_valid_arr = op.get_valid_idx(obj, L_frac=L_frac)
+            # skips bubbles for which not enough frames of early growth were observed
+            if np.sum(is_valid_arr) < min_data_pts:
+                continue
+
+            v_est = op.est_flow_speed(obj)
+            print(ID, 'R = ', obj['props_proc']['radius [um]'][0], 'v = ',
+                    v_est, ' vs. ', v_meta['v_max'])
+
+
         # gets sizes of each bubble
         for ID, obj in raw_data['objects'].items():
             # skips objects that are not definitely real objects (bubbles)
@@ -565,52 +635,13 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
             # sets latest possible nucleation time to time when bubble first observed
             t_nuc_hi = np.min(t_bub)
 
-            # sets moveable limits on effective diffusivity for binary search
-            D_lo_tmp = D_lo
-            D_hi_tmp = D_hi
-            for _ in range(max_iter):
-
-                # makes guess for effective diffusivity constant
-                D = (D_lo_tmp + D_hi_tmp) / 2
-                # packages it for solver
-                dict_args = {'D' : D}
-                # collects inputs -- must recollect after an.fit_growth_to_pt b/c it inserts t_nuc
-                eps_params = list((dt, v_meta['p_sat'], R_nuc, v_meta['L'], v_meta['p_in'], v_meta['v_max'],
-                                    polyol_data_file, eos_co2_file))
-
-                # fits nucleation time to data [s]
-                t_nuc, output = fit_fn(t_bub, R_bub, t_nuc_lo, t_nuc_hi,
-                                            growth_fn, eps_params, i_t_nuc,
-                                            **fit_fn_params, max_iter=max_iter,
-                                            dict_args=dict_args)
-
-                # extracts model values for time and radius
-                t_fit = output[i_t]
-                R_fit = output[i_R]
-
-                # compares slopes of fit and data
-                exp_ratio = calc_exp_ratio(t_nuc, t_fit, R_fit, t_bub, R_bub)
-
-                if np.abs(exp_ratio - 1) < exp_ratio_tol:
-                    print('For D = {0:g}, exponent ratio '.format(D) + \
-                        '{0:.3f} deviates from 1 by less than tolerance {1:.3f}.' \
-                          .format(exp_ratio, exp_ratio_tol))
-                    break
-
-                print('For D = {0:g}, exponent ratio = {1:.3f}'.format(D, exp_ratio))
-                D_lo_tmp, D_hi_tmp = update_bounds_D(exp_ratio, D, D_lo_tmp,
-                                                        D_hi_tmp)
-                # expands bounds on D if
-                if (D_hi_tmp >= D_hi) and \
-                        ((D_hi_tmp - D)/D_hi_tmp < exp_ratio_tol) and \
-                        (D < D_hi_tmp):
-                    print('Doubling upper bound on D.')
-                    D_hi_tmp *= 2
-                elif (D_lo_tmp <= D_lo) and \
-                        ((D - D_lo_tmp)/D_lo_tmp < exp_ratio_tol) and \
-                        (D > D_lo_tmp):
-                    print('Halving lower bound on D.')
-                    D_lo_tmp /= 2
+            # fits parameters
+            D, t_nuc, t_fit, \
+            R_fit, output = fit_proc(fit_fn, growth_fn, v_meta, polyol_data_file, 
+                                    eos_co2_file, t_bub, R_bub, t_nuc_lo, 
+                                    t_nuc_hi, i_t_nuc, fit_fn_params, D_lo, 
+                                    D_hi, dt, R_nuc, max_iter, i_t, i_R,
+                                    exp_ratio_tol)
 
             # plots result
             if show_plots:
@@ -942,6 +973,31 @@ def diffusivity(D, args):
                      polyol_data_file, eos_co2_file, adaptive_dt=adaptive_dt,
                      implicit=implicit, d_tolman=d_tolman,
                      tol_R=tol_R, alpha=alpha, D=D)
+                     
+                     
+def scipy_param_fit(fit_fn, growth_fn, v_meta, polyol_data_file, 
+                    eos_co2_file, t_bub, R_bub, t_nuc_lo, 
+                    t_nuc_hi, i_t_nuc, fit_fn_params, D_lo, 
+                    D_hi, dt, R_nuc, max_iter, i_t, i_R,
+                    exp_ratio_tol):
+    """"""     
+    # fits growth function to bubble growth data
+    D_guess = (D_lo + D_hi) / 2
+    t_nuc_guess = t_nuc_lo # better to underestimate nucleation time than predict one later than observation
+    try:
+        popt, _ = scipy.optimize.curve_fit(growth_fn, t_bub, R_bub, 
+                                            p0=[D_guess, t_nuc_guess])
+    except:
+        print('Failed to fit data')
+        return D_guess, t_nuc_guess, t_bub, R_bub, []
+    D, t_nuc = popt
+    # computes predictions of fit
+    t_range = np.max(t_bub) - t_nuc
+    n_pts = int(t_range/dt)
+    t_fit = np.linspace(t_nuc, np.max(t_bub), n_pts+1)[1:] # excludes nucleation time
+    R_fit = growth_fn(t_fit, *popt)
+
+    return D, t_nuc, t_fit, R_fit, []
 
 
 def update_bounds_D(exp_ratio, D, D_lo, D_hi):
