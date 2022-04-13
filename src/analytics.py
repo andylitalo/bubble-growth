@@ -317,11 +317,25 @@ def calc_abs_sgn_mse(t_meas, R_meas, t_pred, R_pred):
 
 
 def ep_param_fit(fit_fn, growth_fn, v_meta, polyol_data_file, 
-            eos_co2_file, t_bub, R_bub, t_nuc_lo, 
-            t_nuc_hi, i_t_nuc, fit_fn_params, D_lo, 
+            eos_co2_file, t_bub, R_bub, frac_lo, 
+            frac_hi, i_t_nuc, fit_fn_params, D_lo, 
             D_hi, dt, R_nuc, max_iter, i_t, i_R,
-            exp_ratio_tol):
+            exp_ratio_tol, rho_co2_vap):
     """Fits D and t_nuc parameters of Epstein - Plesset model."""
+    ### Estimates bounds on nucleation time [s]
+    # function to estimate density of co2 vs. pressure
+    f_rho_co2 = polyco2.interp_rho_co2(eos_co2_file)
+    # array of times from entering observation capillary to observation of bubble [s]
+    t_arr = np.linspace(0, np.min(t_bub), 100)
+    # array of pressures in observation capillary at times given in t_arr
+    p_arr = flow.calc_p(v_meta['p_in'], P_ATM, v_meta['v_max'], t_arr, v_meta['L'])
+    # finds index where estimated CO2 density at corresponding pressure is below threshold vapor density
+    i_vap = np.where(f_rho_co2(p_arr) < rho_co2_vap)[0][0]
+    # sets earliest possible nucleation time to time when CO2 becomes vapor-like at local pressure
+    t_nuc_lo = t_arr[i_vap]
+    # sets latest possible nucleation time to time when bubble first observed
+    t_nuc_hi = np.min(t_bub)
+    
     # sets moveable limits on effective diffusivity for binary search
     D_lo_tmp = D_lo
     D_hi_tmp = D_hi
@@ -480,6 +494,7 @@ def fit_D_t_nuc_load(load_path, save_path, save_freq=-1,
         with open(os.path.splitext(load_path)[0] + metatag, 'rb') as f:
             metadata = pkl.load(f)
     except:
+        print('Could not load data from {0:s}'.format(load_path))
         data = {}
         metadata = {}
 
@@ -489,6 +504,7 @@ def fit_D_t_nuc_load(load_path, save_path, save_freq=-1,
                     'n_fit' : n_fit,
                     'show_plots' : show_plots,
                     'data' : data}
+    print(metadata.keys())
     params = dict(metadata, **addl_params)
 
     return fit_D_t_nuc(**params)
@@ -621,27 +637,13 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
             W_bub = W_bub[is_valid_arr]
             L_bub = L_bub[is_valid_arr]
 
-            ### Estimates bounds on nucleation time [s]
-            # function to estimate density of co2 vs. pressure
-            f_rho_co2 = polyco2.interp_rho_co2(eos_co2_file)
-            # array of times from entering observation capillary to observation of bubble [s]
-            t_arr = np.linspace(0, np.min(t_bub), 100)
-            # array of pressures in observation capillary at times given in t_arr
-            p_arr = flow.calc_p(v_meta['p_in'], P_ATM, v_meta['v_max'], t_arr, v_meta['L'])
-            # finds index where estimated CO2 density at corresponding pressure is below threshold vapor density
-            i_vap = np.where(f_rho_co2(p_arr) < rho_co2_vap)[0][0]
-            # sets earliest possible nucleation time to time when CO2 becomes vapor-like at local pressure
-            t_nuc_lo = t_arr[i_vap]
-            # sets latest possible nucleation time to time when bubble first observed
-            t_nuc_hi = np.min(t_bub)
-
             # fits parameters
             D, t_nuc, t_fit, \
             R_fit, output = fit_proc(fit_fn, growth_fn, v_meta, polyol_data_file, 
-                                    eos_co2_file, t_bub, R_bub, t_nuc_lo, 
-                                    t_nuc_hi, i_t_nuc, fit_fn_params, D_lo, 
+                                    eos_co2_file, t_bub, R_bub, frac_lo, 
+                                    frac_hi, i_t_nuc, fit_fn_params, D_lo, 
                                     D_hi, dt, R_nuc, max_iter, i_t, i_R,
-                                    exp_ratio_tol)
+                                    exp_ratio_tol, rho_co2_vap)
 
             # plots result
             if show_plots:
@@ -687,6 +689,12 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
         # must break out of two for loops when complete
         if ct == n_fit:
             break
+
+        # saves again at the end
+        if save_path:
+            print('Saving after {0:d} bubbles analyzed.\n'.format(ct))
+            with open(save_path, 'wb') as f:
+                pkl.dump(data, f)
 
     return data
 
@@ -976,20 +984,22 @@ def diffusivity(D, args):
                      
                      
 def scipy_param_fit(fit_fn, growth_fn, v_meta, polyol_data_file, 
-                    eos_co2_file, t_bub, R_bub, t_nuc_lo, 
-                    t_nuc_hi, i_t_nuc, fit_fn_params, D_lo, 
+                    eos_co2_file, t_bub, R_bub, frac_lo, 
+                    frac_hi, i_t_nuc, fit_fn_params, D_lo, 
                     D_hi, dt, R_nuc, max_iter, i_t, i_R,
-                    exp_ratio_tol):
-    """"""     
+                    exp_ratio_tol, rho_co2_vap):
+    """Lots of unused or dummy parameters just to hack this in place."""     
     # fits growth function to bubble growth data
     D_guess = (D_lo + D_hi) / 2
-    t_nuc_guess = t_nuc_lo # better to underestimate nucleation time than predict one later than observation
+    t_nuc_guess = frac_lo*np.min(t_bub) # better to underestimate nucleation time than predict one later than observation
+    # all dummy parameters so things don't break later on.
+    output = (t_bub, t_bub, D_guess*np.ones([len(t_bub)]), t_bub, t_bub, t_bub, t_bub, t_bub, t_bub, t_bub)
     try:
         popt, _ = scipy.optimize.curve_fit(growth_fn, t_bub, R_bub, 
                                             p0=[D_guess, t_nuc_guess])
     except:
         print('Failed to fit data')
-        return D_guess, t_nuc_guess, t_bub, R_bub, []
+        return D_guess, t_nuc_guess, t_bub, R_bub, output
     D, t_nuc = popt
     # computes predictions of fit
     t_range = np.max(t_bub) - t_nuc
@@ -997,7 +1007,7 @@ def scipy_param_fit(fit_fn, growth_fn, v_meta, polyol_data_file,
     t_fit = np.linspace(t_nuc, np.max(t_bub), n_pts+1)[1:] # excludes nucleation time
     R_fit = growth_fn(t_fit, *popt)
 
-    return D, t_nuc, t_fit, R_fit, []
+    return D, t_nuc, t_fit, R_fit, output
 
 
 def update_bounds_D(exp_ratio, D, D_lo, D_hi):
