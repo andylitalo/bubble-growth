@@ -9,7 +9,7 @@ of CO2 from the inner stream to the outer stream.
 """
 # adds path to import other libraries
 import sys
-sys.path.append('../libs/')
+sys.path.append('../')
 
 
 # imports standard libraries

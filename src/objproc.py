@@ -11,7 +11,7 @@ import numpy as np
 
 # custom libraries
 import sys
-sys.path.append('../libs/')
+sys.path.append('../../libs/')
 import fn
 from conversions import *
 
