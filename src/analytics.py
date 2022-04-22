@@ -26,6 +26,7 @@ import sys
 sys.path.append('../libs/')
 import finitediff as fd
 import plot.bubble as pltb
+import plot.genl as pltg
 from conversions import *
 from constants import *
 import polyco2
@@ -316,6 +317,56 @@ def calc_abs_sgn_mse(t_meas, R_meas, t_pred, R_pred):
     return np.abs(calc_sgn_mse(t_meas, R_meas, t_pred, R_pred))
 
 
+def D_fit_proc(fit_fn, growth_fn, t_meas, R_meas, D_lo, D_hi, 
+            t_nuc_lo, t_nuc_hi, params_dict, exp_ratio_tol, 
+            err_fn=calc_abs_sgn_mse, err_tol=0.003, max_iter=15, i_t=0, i_R=1):
+    """Fits diffusivity in bubble growth model."""
+    # sets moveable limits on effective diffusivity for binary search
+    # D_guess = ((np.max(R_meas)**2 - np.min(R_meas)**2))/(np.max(t_meas) - np.min(t_meas))
+    D_lo_tmp = D_lo
+    D_hi_tmp = D_hi
+    for _ in range(max_iter):
+
+        # makes guess for effective diffusivity constant
+        D = (D_lo_tmp + D_hi_tmp) / 2
+        # packages it for solver
+        params_dict['D'] = D
+
+        # fits nucleation time to data [s]
+        t_nuc, output = fit_fn(growth_fn, t_meas, R_meas, t_nuc_lo, t_nuc_hi,
+                                params_dict, max_iter=max_iter,
+                                err_fn=err_fn, err_tol=err_tol)
+        # extracts model values for time and radius
+        t_fit = output[i_t]
+        R_fit = output[i_R]
+
+        # compares slopes of fit and data
+        exp_ratio = calc_exp_ratio(t_nuc, t_fit, R_fit, t_meas, R_meas)
+
+        if np.abs(exp_ratio - 1) < exp_ratio_tol:
+            print('For D = {0:g}, exponent ratio '.format(D) + \
+                '{0:.3f} deviates from 1 by less than tolerance {1:.3f}.' \
+                    .format(exp_ratio, exp_ratio_tol))
+            break
+
+        print('For D = {0:g}, exponent ratio = {1:.3f}'.format(D, exp_ratio))
+        D_lo_tmp, D_hi_tmp = update_bounds_D(exp_ratio, D, D_lo_tmp,
+                                                D_hi_tmp)
+        # expands bounds on D if
+        if (D_hi_tmp >= D_hi) and \
+                ((D_hi_tmp - D)/D_hi_tmp < exp_ratio_tol) and \
+                (D < D_hi_tmp):
+            print('Doubling upper bound on D.')
+            D_hi_tmp *= 2
+        elif (D_lo_tmp <= D_lo) and \
+                ((D - D_lo_tmp)/D_lo_tmp < exp_ratio_tol) and \
+                (D > D_lo_tmp):
+            print('Halving lower bound on D.')
+            D_lo_tmp /= 2
+                    
+    return D, t_nuc, t_fit, R_fit, output
+
+
 def ep_param_fit(fit_fn, growth_fn, v_meta, polyol_data_file, 
             eos_co2_file, t_bub, R_bub, frac_lo, 
             frac_hi, i_t_nuc, fit_fn_params, D_lo, 
@@ -354,8 +405,8 @@ def ep_param_fit(fit_fn, growth_fn, v_meta, polyol_data_file,
         params_dict = {**ep_params, **fit_fn_params}
 
         # fits nucleation time to data [s]
-        t_nuc, output = fit_fn(t_bub, R_bub, t_nuc_lo, t_nuc_hi,
-                                growth_fn, params_dict, max_iter=max_iter)
+        t_nuc, output = fit_fn(growth_fn, t_bub, R_bub, t_nuc_lo, t_nuc_hi,
+                                params_dict, max_iter=max_iter)
         # extracts model values for time and radius
         t_fit = output[i_t]
         R_fit = output[i_R]
@@ -387,16 +438,14 @@ def ep_param_fit(fit_fn, growth_fn, v_meta, polyol_data_file,
     return D, t_nuc, t_fit, R_fit, output
 
 
-def fit_growth_to_pts(t_meas, R_meas, t_nuc_lo, t_nuc_hi, growth_fn, args,
-                     i_t_nuc, err_fn=calc_abs_sgn_mse, err_tol=0.003, ax=None,
-                     max_iter=15, i_t=0, i_R=-2, dict_args={}, x_lim=None,
+def fit_growth_to_pts(growth_fn, t_meas, R_meas, t_nuc_lo, t_nuc_hi, params_dict,
+                     err_fn=calc_abs_sgn_mse, err_tol=0.003, ax=None,
+                     max_iter=15, i_t=0, i_R=-2, x_lim=None,
                      y_lim=None, t_fs=18, ax_fs=16, tk_fs=14):
     """
     Finds a suitable model of bubble growth that fits measured bubble radius at
     many time points.
     """
-    # inserts place-holder (0) for nucleation time in arguments list
-    args.insert(i_t_nuc, 0)
     # initializes plot to show the trajectories of different guesses
     if ax is not None:
         ax.plot(t_meas*s_2_ms, R_meas*m_2_um, 'g*', ms=12, label='fit pt')
@@ -405,8 +454,8 @@ def fit_growth_to_pts(t_meas, R_meas, t_nuc_lo, t_nuc_hi, growth_fn, args,
     n_iter = 0
 
     # computes bubble growth trajectory with lowest nucleation time
-    args[i_t_nuc] = t_nuc_lo
-    output = growth_fn(*tuple(args), **dict_args)
+    params_dict['t_nuc'] = t_nuc_lo
+    output = growth_fn(**params_dict)
     t = output[i_t]
     R = output[i_R]
 
@@ -425,8 +474,8 @@ def fit_growth_to_pts(t_meas, R_meas, t_nuc_lo, t_nuc_hi, growth_fn, args,
         # calculates new nucleation time as middle of the two bounds (bisection algorithm)
         t_nuc = (t_nuc_lo + t_nuc_hi)/2
         # computes bubble growth trajectory with new bubble nucleation time
-        args[i_t_nuc] = t_nuc
-        output = growth_fn(*tuple(args), **dict_args)
+        params_dict['t_nuc'] = t_nuc
+        output = growth_fn(**params_dict)
         # extracts time and radius of bubble growth trajectory from output
         t = output[i_t] # [s]
         R = output[i_R] # [m]
@@ -548,7 +597,7 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
                 exp_ratio_tol, fit_fn=fit_growth_to_pts, L_frac=1,
                 fit_proc=ep_param_fit, n_fit=-1, min_data_pts=4, max_iter=15,
                 i_t_nuc=0, i_t=0, i_R=-2, rho_co2_vap=50,
-                x_lim=None, y_lim=None, show_plots=True,
+                x_lim=None, y_lim=None, show_plots=True, quiet=True,
                 save_freq=-1, save_path=None, data={}, metatag='_meta.pkl'):
     """
     Fits effective diffusivity D and nucleation time t_nuc.
@@ -615,7 +664,8 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
             # skips objects that are not definitely real objects (bubbles)
             # or that have already been analyzed
             if not op.is_true_obj(obj) or (ID in vid_data['data'].keys()):
-                print('skipping bubble {0:d} -- not true object or already analyzed'.format(ID))
+                if not quiet:
+                    print('skipping bubble {0:d} -- not true object or already analyzed'.format(ID))
                 continue
 
             # time of observations of bubble since entering observation capillary [s]
@@ -630,7 +680,8 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
             is_valid_arr = op.get_valid_idx(obj, L_frac=L_frac)
             # skips bubbles for which not enough frames of early growth were observed
             if len(t_bub[is_valid_arr]) < min_data_pts:
-                print('skipping bubble {0:d} -- not enough data'.format(ID))
+                if not quiet:
+                    print('skipping bubble {0:d} -- not enough data'.format(ID))
                 continue
 
             print('\nAnalyzing bubble {0:d} at {1:.3f} m.\n'.format(ID, v_meta['d']))
@@ -703,10 +754,40 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
     return data
 
 
-def fit_growth(t_meas, R_meas, t_nuc_lo, t_nuc_hi, growth_fn, params_dict,
-                     err_fn=calc_abs_sgn_mse, err_tol=0.003, ax=None,
-                     max_iter=15, i_t=0, i_R=-2, title='', x_lim=None,
-                     y_lim=None, t_fs=18, ax_fs=16, tk_fs=14):
+def arrange_metadata_genl(data_filename, data_dir_list,
+                D_lo, D_hi, growth_fn, fit_fn_params,
+                exp_ratio_tol, t_nuc_guess_fn, t_nuc_guess_params,
+                fit_fn, L_frac, err_fn, err_tol, fit_proc, 
+                min_data_pts, max_iter, i_t, i_R):
+    """Arranges metadata."""
+    metadata = {'data_filename' : data_filename,
+                'data_dir_list' : data_dir_list,
+                'D_lo' : D_lo,
+                'D_hi' : D_hi,
+                'growth_fn' : growth_fn,
+                'fit_fn_params' : fit_fn_params,
+                'exp_ratio_tol' : exp_ratio_tol,
+                't_nuc_guess_fn' : t_nuc_guess_fn,
+                't_nuc_guess_params' : t_nuc_guess_params,
+                'fit_fn' : fit_fn,
+                'L_frac' : L_frac,
+                'min_data_pts' : min_data_pts,
+                'err_fn' : err_fn,
+                'err_tol' : err_tol,
+                'fit_proc' : fit_proc,
+                'max_iter' : max_iter,
+                'min_data_pts' : min_data_pts,
+                'i_t' : i_t,
+                'i_R' : i_R,
+                }
+
+    return metadata
+
+
+def fit_growth(growth_fn, t_meas, R_meas, t_nuc_lo, t_nuc_hi, params_dict,
+                err_fn=calc_abs_sgn_mse, err_tol=0.003, ax=None,
+                max_iter=15, i_t=0, i_R=1, title='', x_lim=None,
+                y_lim=None, t_fs=18, ax_fs=16, tk_fs=14):
     """
     Finds a suitable model of bubble growth that fits measured bubble radius at
     many time points.
@@ -798,6 +879,163 @@ def fit_growth(t_meas, R_meas, t_nuc_lo, t_nuc_hi, growth_fn, params_dict,
         plt.legend(loc='center left', bbox_to_anchor=(legend_x, legend_y))
 
     return t_nuc, output
+
+
+def fit_D_t_nuc_genl(data_filename, data_dir_list,
+                D_lo, D_hi, growth_fn, fit_fn_params,
+                exp_ratio_tol, t_nuc_guess_fn, t_nuc_guess_params,
+                fit_fn=fit_growth, L_frac=1, err_fn=calc_abs_sgn_mse, err_tol=0.003,
+                fit_proc=D_fit_proc, n_fit=-1, min_data_pts=4, max_iter=15,
+                i_t=0, i_R=1, x_lim=None, y_lim=None, show_plots=True,
+                save_freq=-1, save_path=None, data={}, metatag='_meta.pkl',
+                ax_fs=16, tk_fs=16, quiet=True):
+    """
+    Fits effective diffusivity D and nucleation time t_nuc.
+
+    TODO: select t_nuc_lo and t_nuc_hi with absolute deviation
+    from t_center instead of fractional since deviation should
+    not depend on time traveling through observation capillary.
+
+    TODO break down 'model_output' into labeled data in dictionary
+
+    Parameters
+    ----------
+    """
+    # arranges metadata
+    metadata = arrange_metadata_genl(data_filename, data_dir_list,
+                D_lo, D_hi, growth_fn, fit_fn_params,
+                exp_ratio_tol, t_nuc_guess_fn, t_nuc_guess_params,
+                fit_fn, L_frac, err_fn, err_tol, fit_proc, 
+                min_data_pts, max_iter, i_t, i_R)
+    # saves metadata separately
+    if save_path:
+        with open(os.path.splitext(save_path)[0] + metatag, 'wb') as f:
+            pkl.dump(metadata, f)
+            
+
+    # starts counting objects whose growth is modeled
+    ct = 0
+    # loads data from each file
+    for data_dir in data_dir_list:
+        # loads data
+        with open(os.path.join(data_dir, data_filename), 'rb') as f:
+            raw_data = pkl.load(f)
+
+        # gets conditions of experiment
+        v_meta = op.get_vid_metadata(raw_data['metadata'])
+        num = v_meta['num']
+
+        # loads previous data at this distance if available
+        if num in data.keys():
+            vid_data = data[num]
+            # updates metadata if new params added
+            vid_data['metadata'] = v_meta
+        else:
+            # creates dictionary for bubbles in current measurement video
+            vid_data = {'data' : {},
+                        'metadata' : v_meta}
+
+        # gets sizes of each bubble
+        for ID, obj in raw_data['objects'].items():
+            # skips objects that are not definitely real objects (bubbles)
+            # or that have already been analyzed
+            if not op.is_true_obj(obj) or (ID in vid_data['data'].keys()):
+                if not quiet:
+                    print('skipping bubble {0:d} -- not true object or already analyzed'.format(ID))
+                continue
+
+            # time of observations of bubble since entering observation capillary [s]
+            t_bub = op.calc_t(obj, v_meta['d'], v_meta['v_max'])
+            # bubble radius [m]
+            R_bub = np.asarray(obj['props_proc']['radius [um]']) * um_2_m
+            # just in case, stores width (vertical extent) and length
+            # (horizontal) extent of bubbles [m]
+            W_bub = np.asarray(op.calc_W(obj)) * um_2_m
+            L_bub = np.asarray(op.calc_L(obj)) * um_2_m
+            # gets indices of frames for bubble's fully visible early growth
+            is_valid_arr = op.get_valid_idx(obj, L_frac=L_frac)
+            # skips bubbles for which not enough frames of early growth were observed
+            if len(t_bub[is_valid_arr]) < min_data_pts:
+                if not quiet:
+                    print('skipping bubble {0:d} -- not enough data'.format(ID))
+                continue
+
+            print('\nAnalyzing bubble {0:d} at {1:.3f} m.\n'.format(ID, v_meta['d']))
+
+            # extracts only valid measurements
+            t_bub = t_bub[is_valid_arr]
+            R_bub = R_bub[is_valid_arr]
+            W_bub = W_bub[is_valid_arr]
+            L_bub = L_bub[is_valid_arr]
+
+            # fits parameters 
+            t_nuc_lo, t_nuc_hi = t_nuc_guess_fn(t_bub, v_meta, **t_nuc_guess_params)
+
+            D, t_nuc, t_fit, \
+            R_fit, output = fit_proc(fit_fn, growth_fn, t_bub, R_bub, D_lo, D_hi, 
+                                        t_nuc_lo, t_nuc_hi, fit_fn_params, exp_ratio_tol, 
+                                        err_fn, err_tol, i_t=i_t, i_R=i_R, max_iter=max_iter)
+
+            # plots result
+            if show_plots:
+                fig = plt.figure()
+                ax = fig.add_subplot(111)
+                ax.plot((np.asarray(t_fit) - t_nuc)*s_2_ms, np.asarray(R_fit)*m_2_um, '-', lw=2, label='fit')
+                ax.plot((np.asarray(t_bub) - t_nuc)*s_2_ms, np.asarray(R_bub)*m_2_um, 'o', ms=6, label='data')
+                ax.set_xscale('log')
+                ax.set_yscale('log')
+                ax.set_xlabel(r'$t - t_{nuc}$ [ms]', fontsize=ax_fs)
+                ax.set_ylabel(r'$R$ [$\mu$m]', fontsize=ax_fs)
+                ax.tick_params(axis='both', labelsize=tk_fs)
+                pltg.legend(ax)
+                if x_lim:
+                    ax.set_xlim(x_lim)
+                if y_lim:
+                    ax.set_ylim(y_lim)
+
+            # stores results [SI units]
+            vid_data['data'][ID] = {'t_nuc' : t_nuc,
+                            'd_nuc' : v_meta['v_max'] * t_nuc,
+                            'D' : D,
+                            't_bub' : t_bub,
+                            'R_bub' : R_bub,
+                            'W_bub' : W_bub,
+                            'L_bub' : L_bub,
+                            't_fit': t_fit,
+                            'R_fit' : R_fit,
+                            'model_output' : output
+                            }
+
+            # ends loop when desired number of trajectories has been fit
+            ct += 1
+            print('\nAnalyzed {0:d} bubbles.\n'.format(ct))
+
+            # saves data periodically
+            if ( (ct % save_freq) == 1 ) and save_path:
+                print('Saving after {0:d} bubbles analyzed.\n'.format(ct))
+                data[num] = vid_data
+                with open(save_path, 'wb') as f:
+                    pkl.dump(data, f)
+
+            if ct == n_fit:
+                break
+
+        # stores video data under distance along capillary [m]
+        data[num] = vid_data
+        print('\nAnalyzed videos taken at distance {0:.3f} m.'.format(v_meta['d']))
+        print('There are {0:d} videos to analyze.\n'.format(len(data_dir_list)))
+
+        # must break out of two for loops when complete
+        if ct == n_fit:
+            break
+
+        # saves again at the end
+        if save_path:
+            print('Saving after {0:d} bubbles analyzed.\n'.format(ct))
+            with open(save_path, 'wb') as f:
+                pkl.dump(data, f)
+
+    return data
 
 
 def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
@@ -945,6 +1183,30 @@ def time_step_convergence(growth_model, dt_list, t_nuc, p_s, R_nuc, L,
             c_s_list, R_list, rho_co2_list)
 
     return result
+
+
+def t_nuc_guess_frac(t_meas, v_meta, frac_lo, frac_hi):
+    """Guesses nucleation time based on fraction of minimum time."""
+    return np.min(t_meas)*frac_lo, np.min(t_meas)*frac_hi
+
+
+def t_nuc_guess_vap(t_meas, v_meta, eos_co2_file, rho_co2_vap):
+    """Guesses nucleation time by ensuring CO2 is in vapor-like phase."""
+    ### Estimates bounds on nucleation time [s]
+    # function to estimate density of co2 vs. pressure
+    f_rho_co2 = polyco2.interp_rho_co2(eos_co2_file)
+    # array of times from entering observation capillary to observation of bubble [s]
+    t_arr = np.linspace(0, np.min(t_meas), 100)
+    # array of pressures in observation capillary at times given in t_arr
+    p_arr = flow.calc_p(v_meta['p_in'], P_ATM, v_meta['v_max'], t_arr, v_meta['L'])
+    # finds index where estimated CO2 density at corresponding pressure is below threshold vapor density
+    i_vap = np.where(f_rho_co2(p_arr) < rho_co2_vap)[0][0]
+    # sets earliest possible nucleation time to time when CO2 becomes vapor-like at local pressure
+    t_nuc_lo = t_arr[i_vap]
+    # sets latest possible nucleation time to time when bubble first observed
+    t_nuc_hi = np.min(t_meas)
+
+    return t_nuc_lo, t_nuc_hi
 
 
 def tol_R_convergence(growth_model, tol_R_list, t_nuc, p_s, R_nuc, L,
