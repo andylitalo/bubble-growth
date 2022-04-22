@@ -652,6 +652,15 @@ def sqrt_fit(t, D, t_nuc):
     return np.sqrt(D*(np.abs(t - t_nuc)))
 
 
+def sqrt_growth(t_nuc, tf, dt, D):
+    """Structured like `grow` but models growth with square-root function for simplicity."""
+    n = int((tf - t_nuc) / dt) + 1
+    t = np.linspace(t_nuc, tf, n)
+    R = sqrt_fit(t_nuc, t, D)
+
+    return t_nuc, t, R
+    
+
 def time_step_dcdr(dt, inputs, args):
     """
     Advances system forward by one time step using dc/dr direct calculation.

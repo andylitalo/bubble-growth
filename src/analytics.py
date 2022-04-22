@@ -613,6 +613,7 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
             # skips objects that are not definitely real objects (bubbles)
             # or that have already been analyzed
             if not op.is_true_obj(obj) or (ID in vid_data['data'].keys()):
+                print('skipping bubble {0:d} -- not true object or already analyzed'.format(ID))
                 continue
 
             # time of observations of bubble since entering observation capillary [s]
@@ -627,6 +628,7 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
             is_valid_arr = op.get_valid_idx(obj, L_frac=L_frac)
             # skips bubbles for which not enough frames of early growth were observed
             if len(t_bub[is_valid_arr]) < min_data_pts:
+                print('skipping bubble {0:d} -- not enough data'.format(ID))
                 continue
 
             print('\nAnalyzing bubble {0:d} at {1:.3f} m.\n'.format(ID, v_meta['d']))
@@ -697,6 +699,103 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
                 pkl.dump(data, f)
 
     return data
+    
+
+def fit_growth(t_meas, R_meas, t_nuc_lo, t_nuc_hi, growth_fn, params_dict,
+                     err_fn=calc_abs_sgn_mse, err_tol=0.003, ax=None,
+                     max_iter=15, i_t=0, i_R=-2, title='', x_lim=None,
+                     y_lim=None, t_fs=18, ax_fs=16, tk_fs=14):
+    """
+    Finds a suitable model of bubble growth that fits measured bubble radius at
+    many time points.
+    """
+    # inserts first guess for nucleation time in arguments list
+    params_dict['t_nuc'] = t_nuc_lo
+    # initializes plot to show the trajectories of different guesses
+    if ax is not None:
+        ax.plot(t_meas*s_2_ms, R_meas*m_2_um, 'g*', ms=12, label='fit pt')
+
+    # initializes counter of number of iterations
+    n_iter = 0
+
+    # computes bubble growth trajectory with lowest nucleation time
+    output = growth_fn(**params_dict)
+    t = output[i_t]
+    R = output[i_R]
+
+    # ends fitting if maximum predictions all below minimum measured values
+    R_pred = np.interp(t_meas, t, R)
+    if np.sum(np.sign(R_pred - R_meas)) / len(R_pred) == -1:
+        print('Predicted bubble radii are all smaller than measured values' + \
+              ' for lowest nucleation time. Terminating early.')
+        return t_nuc_lo, output
+
+    # computes error
+    err = err_fn(t_meas, R_meas, t, R)
+
+    # bisection algorithm searches for nucleation time yielding accurate R
+    while err > err_tol:
+        # calculates new nucleation time as middle of the two bounds (bisection algorithm)
+        t_nuc = (t_nuc_lo + t_nuc_hi)/2
+        # computes bubble growth trajectory with new bubble nucleation time
+        params_dict['t_nuc'] = t_nuc
+        output = growth_fn(**params_dict)
+        # extracts time and radius of bubble growth trajectory from output
+        t = output[i_t] # [s]
+        R = output[i_R] # [m]
+
+        # computes error
+        err = err_fn(t_meas, R_meas, t, R)
+
+        # determines whether to increase or decrease next nucleation time guess
+        sgn_mse = calc_sgn_mse(t_meas, R_meas, t, R)
+        # predicted bubble radius too large means nucleation time is too early,
+        # so we raise the lower bound
+        if sgn_mse > 0:
+            t_nuc_lo = t_nuc
+        # otherwise, nucleation time is too late, so we lower the upper bound
+        else:
+            t_nuc_hi = t_nuc
+
+        print('t_nuc = {0:.3f} ms. Error is {1:.4f} and tol is {2:.4f}.' \
+                .format(t_nuc*s_2_ms, err, err_tol))
+
+        # plots the guessed growth trajectory
+        if ax is not None:
+            ax.plot(np.array(t)*s_2_ms, np.array(R)*m_2_um,
+                    label=r'$t_{nuc}=$' + '{0:.3f} ms'.format(t_nuc*s_2_ms))
+
+        n_iter += 1
+        if n_iter == max_iter:
+            print('Max iterations {0:d} reached. Error above tolerance {1:.4f}'\
+                    .format(max_iter, err_tol))
+            print('Nucleation time is {0:.3f} ms.'.format(t_nuc*s_2_ms))
+            break
+
+    if n_iter < max_iter:
+        print('Error {0:.4f} is below tolerance of {1:.4f}'.format(err, err_tol) + \
+                ' for nucleation time t = {0:.3f} ms'.format(t_nuc*s_2_ms))
+    if ax is not None:
+        # formats plot of guessed trajectories
+        ax.set_yscale('log')
+        ax.set_xlabel(r'$t$ [ms]', fontsize=ax_fs)
+        ax.set_ylabel(r'$R(t)$ [$\mu$m]', fontsize=ax_fs)
+        ax.tick_params(axis='both', labelsize=tk_fs)
+        if title:
+            ax.set_title(title, fontsize=t_fs)
+        if x_lim is not None:
+            ax.set_xlim(x_lim)
+        if y_lim is not None:
+            ax.set_ylim(y_lim)
+
+        # creates legend to the right of the plot
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width*0.8, box.height])
+        legend_x = 1
+        legend_y = 0.5
+        plt.legend(loc='center left', bbox_to_anchor=(legend_x, legend_y))
+
+    return t_nuc, output
 
 
 def fit_growth_to_pt(t_bubble, R_bubble, t_nuc_lo, t_nuc_hi, growth_fn, args,
