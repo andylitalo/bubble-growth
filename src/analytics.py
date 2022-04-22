@@ -344,16 +344,18 @@ def ep_param_fit(fit_fn, growth_fn, v_meta, polyol_data_file,
         # makes guess for effective diffusivity constant
         D = (D_lo_tmp + D_hi_tmp) / 2
         # packages it for solver
-        dict_args = {'D' : D}
+        fit_fn_params['D'] = D
         # collects inputs -- must recollect after an.fit_growth_to_pt b/c it inserts t_nuc
-        eps_params = list((dt, v_meta['p_sat'], R_nuc, v_meta['L'], v_meta['p_in'], v_meta['v_max'],
-                            polyol_data_file, eos_co2_file))
+        ep_params = {'dt': dt, 'p_s' : v_meta['p_sat'], 'R_nuc' : R_nuc, 'L' : v_meta['L'], 
+                        'p_in' : v_meta['p_in'], 'v' : v_meta['v_max'],
+                         'polyol_data_file' : polyol_data_file, 
+                         'eos_co2_file' : eos_co2_file}
+        # merges parameter dictionaries
+        params_dict = {**ep_params, **fit_fn_params}
 
         # fits nucleation time to data [s]
         t_nuc, output = fit_fn(t_bub, R_bub, t_nuc_lo, t_nuc_hi,
-                                    growth_fn, eps_params, i_t_nuc,
-                                    **fit_fn_params, max_iter=max_iter,
-                                    dict_args=dict_args)
+                                growth_fn, params_dict, max_iter=max_iter)
         # extracts model values for time and radius
         t_fit = output[i_t]
         R_fit = output[i_R]
@@ -699,7 +701,7 @@ def fit_D_t_nuc(data_filename, data_dir_list, polyol_data_file,
                 pkl.dump(data, f)
 
     return data
-    
+
 
 def fit_growth(t_meas, R_meas, t_nuc_lo, t_nuc_hi, growth_fn, params_dict,
                      err_fn=calc_abs_sgn_mse, err_tol=0.003, ax=None,
