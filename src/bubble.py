@@ -652,10 +652,12 @@ def sqrt_fit(t, D, t_nuc):
     return np.sqrt(D*(np.abs(t - t_nuc)))
 
 
-def sqrt_growth(t_nuc, tf, dt, D):
+def sqrt_growth(t_nuc, tf, dt, D, tmed=1E-4):
     """Structured like `grow` but models growth with square-root function for simplicity."""
-    n = int((tf - t_nuc) / dt) + 1
-    t = np.linspace(t_nuc, tf, n)
+    assert tf - t_nuc > tmed, 'tmed = {0:g} s is too large in bubble.sqrt_growth'.format(tmed)
+    n1 = int(tmed / dt) + 1
+    n2 = int((tf - (tmed + t_nuc)) / tmed) + 1
+    t = np.concatenate((np.linspace(t_nuc, t_nuc+tmed, n1)[:-1], np.linspace(t_nuc+tmed, tf, n2)))
     R = sqrt_fit(t, D, t_nuc)
 
     return t, R
