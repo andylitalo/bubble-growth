@@ -535,7 +535,7 @@ def fit_growth_to_pts(growth_fn, t_meas, R_meas, t_nuc_lo, t_nuc_hi, params_dict
 
 
 def fit_D_t_nuc_load(load_path, save_path, save_freq=-1,
-                        n_fit=-1, show_plots=False, metatag='_meta.pkl'):
+                        n_fit=-1, metatag='_meta.pkl'):
     """Wrapper for `fit_D_t_nuc` that loads data with parameters."""
     # loads data
     try:
@@ -553,12 +553,40 @@ def fit_D_t_nuc_load(load_path, save_path, save_freq=-1,
     addl_params = {'save_path' : save_path,
                     'save_freq' : save_freq,
                     'n_fit' : n_fit,
-                    'show_plots' : show_plots,
+                    'show_plots' : False,
                     'data' : data}
     print(metadata.keys())
     params = dict(metadata, **addl_params)
 
     return fit_D_t_nuc(**params)
+
+
+def fit_D_t_nuc_genl_load(load_path, save_path, save_freq=-1,
+                        n_fit=-1, metatag='_meta.pkl'):
+    """Wrapper for `fit_D_t_nuc` that loads data with parameters."""
+    # loads data
+    try:
+        with open(load_path, 'rb') as f:
+            data = pkl.load(f)
+        # loads metadata
+        with open(os.path.splitext(load_path)[0] + metatag, 'rb') as f:
+            metadata = pkl.load(f)
+    except:
+        print('Could not load data from {0:s}'.format(load_path))
+        data = {}
+        metadata = {}
+
+    # collects parameters for analysis
+    addl_params = {'save_path' : save_path,
+                    'save_freq' : save_freq,
+                    'n_fit' : n_fit,
+                    'show_plots' : False,
+                    'data' : data,
+                    'metatag' : metatag}
+    print(metadata.keys())
+    params = dict(metadata, **addl_params)
+
+    return fit_D_t_nuc_genl(**params)
 
 
 def arrange_metadata(data_filename, data_dir_list, polyol_data_file,
@@ -771,7 +799,6 @@ def arrange_metadata_genl(data_filename, data_dir_list,
                 't_nuc_guess_params' : t_nuc_guess_params,
                 'fit_fn' : fit_fn,
                 'L_frac' : L_frac,
-                'min_data_pts' : min_data_pts,
                 'err_fn' : err_fn,
                 'err_tol' : err_tol,
                 'fit_proc' : fit_proc,
@@ -911,6 +938,13 @@ def fit_D_t_nuc_genl(data_filename, data_dir_list,
     if save_path:
         with open(os.path.splitext(save_path)[0] + metatag, 'wb') as f:
             pkl.dump(metadata, f)
+
+        if len(data) == 0:
+            try:
+                with open(save_path, 'rb') as f:
+                    data = pkl.load(f)
+            except:
+                print('No data found at {0:s}. Start analysis from beginning.'.format(save_path))
             
 
     # starts counting objects whose growth is modeled
